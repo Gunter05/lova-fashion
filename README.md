@@ -1,4 +1,4 @@
-# [Project Name] — Remote Custom-Fit Styling & Pattern-Making
+# lova-fashion — Remote Custom-Fit Styling & Pattern-Making
 
 AWS re:Deploy 2026 — Month 1 (July 2026) — Theme: **Fashion**
 
@@ -23,7 +23,7 @@ The result: a garment that fits properly, without an in-person fitting.
 
 | Name | Role |
 |---|---|
-| Ousmane | Backend, architecture, Kiro integration |
+| Ousmane | Backend |
 | Verdiane | Backend |
 | NYNA Amanda | Backend |
 | Belvira | Frontend |
