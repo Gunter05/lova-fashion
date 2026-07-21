@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+psycopg2-binary
+sqlalchemy
+supabase          # Python client for Supabase Storage (and auth if needed)
