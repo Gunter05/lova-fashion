@@ -3,5 +3,14 @@ uvicorn[standard]
 pydantic
 python-dotenv
 psycopg2-binary
-sqlalchemy
+sqlalchemy[asyncio]
+asyncpg           # async PostgreSQL driver used by SQLAlchemy async engine
 supabase          # Python client for Supabase Storage (and auth if needed)
+python-multipart  # required by FastAPI for multipart/form-data file uploads
+
+# Testing
+pytest
+pytest-asyncio
+hypothesis
+httpx             # required by FastAPI TestClient
+aiosqlite         # async SQLite driver for in-memory test database
