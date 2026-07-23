@@ -1,7 +1,19 @@
-fastapi
-uvicorn[standard]
-pydantic
-python-dotenv
-psycopg2-binary
-sqlalchemy
-supabase          # Python client for Supabase Storage (and auth if needed)
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+pydantic==2.7.1
+python-dotenv==1.0.1
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.30
+alembic==1.13.1
+
+# Supabase
+supabase==2.9.1
+
+# Module 2 — Photo Capture & Measurement Estimation
+mediapipe==0.10.14
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+python-multipart==0.0.9
+
+# Auth
+python-jose[cryptography]==3.3.0
