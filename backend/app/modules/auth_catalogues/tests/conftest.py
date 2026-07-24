@@ -1,5 +1,5 @@
 """
-Test configuration for the Fabric Catalog property-based tests.
+Test configuration for the Fabric Catalog and Pattern Catalog property-based tests.
 
 Sets up an in-memory SQLite database and a FastAPI TestClient that wires the
 router under /api/v1, overriding the `get_db` dependency so that every test
@@ -7,18 +7,23 @@ runs against a fresh, isolated database with no external connections required.
 
 SQLite is used instead of PostgreSQL so tests run without a Supabase instance.
 The UUID primary key columns are stored as strings in SQLite (aiosqlite driver).
+
+pytest-asyncio 0.21+ deprecates the manual `event_loop` session fixture.
+We use `pytest_asyncio.fixture` with the correct scope instead.
+`asyncio_mode = auto` is already set in pytest.ini so async fixtures are
+picked up automatically.
 """
 
-import asyncio
 import pytest
+import pytest_asyncio
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.modules.auth_catalogues.router import router
-
 
 # ---------------------------------------------------------------------------
 # In-memory async SQLite engine — shared across the test session
@@ -27,15 +32,7 @@ from app.modules.auth_catalogues.router import router
 SQLITE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create a single event loop for the whole test session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session")
 async def engine():
     """Create the async SQLite engine and initialise the schema once per session."""
     eng = create_async_engine(
@@ -65,7 +62,7 @@ def session_factory(engine):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest_asyncio.fixture()
 async def db_session(session_factory, engine):
     """
     Yield a fresh AsyncSession for each test and roll back all changes
@@ -74,8 +71,7 @@ async def db_session(session_factory, engine):
     async with session_factory() as session:
         yield session
         await session.rollback()
-        # Truncate all tables to guarantee isolation between tests
-        from sqlalchemy import text
+        # Delete all rows from every table to guarantee isolation between tests.
         async with engine.begin() as conn:
             for table in reversed(Base.metadata.sorted_tables):
                 await conn.execute(text(f"DELETE FROM {table.name}"))
