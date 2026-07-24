@@ -201,7 +201,7 @@ acceptance criteria it implements.
   - **P9.2** — Archive model; GET /models/{id}/constraints assert 200 with full data
   - **Implements:** all correctness properties from requirements §P1–P9
 
-- [-] 18. Write smoke / integration tests in `tests/test_smoke.py`
+- [~] 18. Write smoke / integration tests in `tests/test_smoke.py`
   - Happy path: upload image → Draft created → admin edits → assigns zones + fabrics → publish → client views detail → internal constraints endpoint returns data
   - Edit-and-republish cycle: PATCH Published → snapshot exists → publish → version incremented
   - Archive flow: archive Published model → client gets 404 → constraints endpoint returns 200
