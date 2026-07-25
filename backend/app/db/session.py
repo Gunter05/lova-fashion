@@ -35,7 +35,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy ORM models."""
-    pass
+    __allow_unmapped__ = True
 
 async def get_db() -> AsyncSession:
     """FastAPI dependency that yields an async database session."""

@@ -4,10 +4,8 @@ from fastapi import FastAPI
 
 from app.modules.auth_user_profile.router import router as auth_user_profile_router
 from app.modules.auth_catalogues.router import router as auth_catalogues_router
-
-# Placeholder imports for future module groups:
-# from app.modules.measurements.router import router as measurements_router
-# from app.modules.business_rules.router import router as business_rules_router
+from app.modules.measurements.router import router as measurements_router
+from app.modules.business_rules.router import router as business_rules_router
 
 
 @asynccontextmanager
@@ -62,7 +60,5 @@ def health():
 
 app.include_router(auth_user_profile_router, prefix="/api/v1")
 app.include_router(auth_catalogues_router, prefix="/api/v1")
-
-# Placeholder router mounts for future module groups:
-# app.include_router(measurements_router, prefix="/measurements")
-# app.include_router(business_rules_router, prefix="/business-rules")
+app.include_router(measurements_router, prefix="/api/v1/measurements", tags=["measurements"])
+app.include_router(business_rules_router, prefix="/api/v1/ease", tags=["ease-allowance"])

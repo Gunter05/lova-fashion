@@ -21,7 +21,7 @@ from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.measurements.models import CaptureSession
-from app.modules.measurements.service import AsyncSessionFactory
+from app.db.session import AsyncSessionLocal as AsyncSessionFactory
 
 # ---------------------------------------------------------------------------
 # Constants

@@ -19,11 +19,9 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import relationship
 
-
-class Base(DeclarativeBase):
-    __allow_unmapped__ = True
+from app.db.session import Base
 
 
 class EaseRule(Base):

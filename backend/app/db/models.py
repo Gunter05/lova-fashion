@@ -26,7 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.modules.auth_catalogues.auth.schemas import UserRole
+from app.modules.auth_user_profile.auth.schemas import UserRole
 
 
 class UserModel(Base):
