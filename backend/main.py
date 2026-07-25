@@ -6,6 +6,7 @@ from app.modules.auth_user_profile.router import router as auth_user_profile_rou
 from app.modules.auth_catalogues.router import router as auth_catalogues_router
 from app.modules.measurements.router import router as measurements_router
 from app.modules.business_rules.router import router as business_rules_router
+from app.modules.business_rules.report_router import router as report_router
 
 
 @asynccontextmanager
@@ -22,8 +23,12 @@ async def lifespan(app: FastAPI):
         make_report_saved_handler,
         make_profile_data_request_handler,
     )
+    from app.modules.business_rules.report_handler import (
+        make_compatibility_evaluated_handler,
+    )
     from app.db.session import AsyncSessionLocal
 
+    # Module 1 — Auth & User Profile event handlers
     event_bus.subscribe(
         "measurements.estimated",
         make_measurements_handler(AsyncSessionLocal),
@@ -35,6 +40,12 @@ async def lifespan(app: FastAPI):
     event_bus.subscribe(
         "profile_data_request",
         make_profile_data_request_handler(AsyncSessionLocal, event_bus),
+    )
+
+    # Module 7 — Final Result & Report event handler
+    event_bus.subscribe(
+        "compatibility.evaluated",
+        make_compatibility_evaluated_handler(AsyncSessionLocal),
     )
 
     yield
@@ -62,3 +73,4 @@ app.include_router(auth_user_profile_router, prefix="/api/v1")
 app.include_router(auth_catalogues_router, prefix="/api/v1")
 app.include_router(measurements_router, prefix="/api/v1/measurements", tags=["measurements"])
 app.include_router(business_rules_router, prefix="/api/v1/ease", tags=["ease-allowance"])
+app.include_router(report_router, prefix="/api/v1")  # Module 7 — reports
