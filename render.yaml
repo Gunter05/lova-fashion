@@ -2,6 +2,7 @@ services:
   - type: web
     name: lova-fashion-api
     runtime: python
+    pythonVersion: "3.12"   # 3.14 has no prebuilt wheels for pydantic-core/numpy/mediapipe
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
