@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: lova-fashion-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+
+    # Auto-deploy on every push to main
+    autoDeploy: true
+
+    # Health check — Render marks the service healthy once this returns 200
+    healthCheckPath: /health
+
+    envVars:
+      # ── Supabase ──────────────────────────────────────────────────────────
+      - key: DATABASE_URL
+        sync: false   # set manually in Render dashboard (postgresql+asyncpg://...)
+
+      - key: SUPABASE_URL
+        sync: false   # https://<project-ref>.supabase.co
+
+      - key: SUPABASE_KEY
+        sync: false   # service-role key (Project Settings → API)
+
+      - key: SUPABASE_JWT_SECRET
+        sync: false   # Project Settings → API → JWT Secret
+
+      - key: SUPABASE_STORAGE_BUCKET
+        value: captures   # bucket name — change if different
+
+      # ── Auth / JWT (Module 1) ─────────────────────────────────────────────
+      - key: JWT_SECRET
+        generateValue: true   # Render generates a secure random value automatically
+
+      - key: JWT_ISSUER
+        value: lova-fashion-auth
+
+      # ── Runtime ───────────────────────────────────────────────────────────
+      - key: ENV
+        value: production
