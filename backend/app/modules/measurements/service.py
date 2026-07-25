@@ -25,9 +25,7 @@ from typing import Literal
 
 from fastapi import BackgroundTasks, HTTPException, UploadFile
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
-import os
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.measurements.classification import BodyShapeClassifier
 from app.modules.measurements.estimation import (
@@ -38,6 +36,7 @@ from app.modules.measurements.estimation import (
 )
 from app.modules.measurements.models import CaptureSession, RawMeasurement
 from app.modules.measurements.storage import StorageDownloadError, SupabaseStorageAdapter
+from app.db.session import AsyncSessionLocal as AsyncSessionFactory
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -53,35 +52,6 @@ _MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB  (AC-02.3)
 _storage = SupabaseStorageAdapter()
 _estimator = MeasurementEstimationService()
 _classifier = BodyShapeClassifier()
-
-
-# ---------------------------------------------------------------------------
-# Async DB engine — reads DATABASE_URL from environment
-# ---------------------------------------------------------------------------
-
-def _build_async_url(sync_url: str) -> str:
-    """
-    Convert a psycopg2-style URL to an asyncpg-style URL.
-    postgresql://... → postgresql+asyncpg://...
-    """
-    if sync_url.startswith("postgresql://"):
-        return sync_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    if sync_url.startswith("postgres://"):
-        return sync_url.replace("postgres://", "postgresql+asyncpg://", 1)
-    return sync_url
-
-
-_async_engine = create_async_engine(
-    _build_async_url(os.environ.get("DATABASE_URL", "")),
-    pool_pre_ping=True,
-    echo=False,
-)
-
-AsyncSessionFactory = sessionmaker(
-    bind=_async_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
 
 
 # ---------------------------------------------------------------------------

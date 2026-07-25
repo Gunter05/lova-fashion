@@ -26,8 +26,7 @@ from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.business_rules.models import MeasurementAdjustment
-# Reuse the shared async session factory from Module 2 to keep one engine
-from app.modules.measurements.service import AsyncSessionFactory
+from app.db.session import AsyncSessionLocal as AsyncSessionFactory
 
 # ---------------------------------------------------------------------------
 # Constants
