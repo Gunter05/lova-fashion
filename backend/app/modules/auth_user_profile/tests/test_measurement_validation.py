@@ -23,7 +23,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.session import get_db
 from app.main import app
-from app.modules.auth_catalogues.auth.security import issue_token
+from app.modules.auth_user_profile.auth.security import issue_token
 
 
 def _run_sync(coro):

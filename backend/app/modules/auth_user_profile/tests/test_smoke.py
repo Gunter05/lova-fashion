@@ -43,7 +43,7 @@ class TestAuthCataloguesRouter:
 class TestSchemaImports:
     def test_auth_schemas_importable(self):
         """All auth schema classes can be imported without errors."""
-        from app.modules.auth_catalogues.auth.schemas import (
+        from app.modules.auth_user_profile.auth.schemas import (
             RegisterRequest,
             RegisterResponse,
             LoginRequest,
@@ -58,7 +58,7 @@ class TestSchemaImports:
 
     def test_profile_schemas_importable(self):
         """All profile schema classes can be imported without errors."""
-        from app.modules.auth_catalogues.profile.schemas import (
+        from app.modules.auth_user_profile.profile.schemas import (
             UserProfileResponse,
             UpdateProfileRequest,
             PhotoProfilResponse,
@@ -69,7 +69,7 @@ class TestSchemaImports:
 
     def test_measurement_schemas_importable(self):
         """All measurement schema classes can be imported without errors."""
-        from app.modules.auth_catalogues.measurement.schemas import (
+        from app.modules.auth_user_profile.measurement.schemas import (
             MensurationCreateRequest,
             MensurationResponse,
             MensurationListResponse,
@@ -78,7 +78,7 @@ class TestSchemaImports:
 
     def test_register_request_validation(self):
         """RegisterRequest validates CNI format, email, password length."""
-        from app.modules.auth_catalogues.auth.schemas import RegisterRequest, UserRole
+        from app.modules.auth_user_profile.auth.schemas import RegisterRequest, UserRole
         import pytest as _pytest
 
         # Valid request
@@ -113,7 +113,7 @@ class TestSchemaImports:
 
     def test_mensuration_request_validation(self):
         """MensurationCreateRequest rejects non-positive and out-of-range values."""
-        from app.modules.auth_catalogues.measurement.schemas import MensurationCreateRequest
+        from app.modules.auth_user_profile.measurement.schemas import MensurationCreateRequest
         import pytest as _pytest
 
         # Valid request

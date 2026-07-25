@@ -6,9 +6,9 @@ Design reference: Internal Package Layout (design.md)
 """
 from fastapi import APIRouter
 
-from app.modules.auth_catalogues.auth.router import router as auth_router
-from app.modules.auth_catalogues.profile.router import router as profile_router
-from app.modules.auth_catalogues.measurement.router import router as measurement_router
+from app.modules.auth_user_profile.auth.router import router as auth_router
+from app.modules.auth_user_profile.profile.router import router as profile_router
+from app.modules.auth_user_profile.measurement.router import router as measurement_router
 
 router = APIRouter()
 

@@ -15,22 +15,22 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth_catalogues.measurement.repository import (
+from app.modules.auth_user_profile.measurement.repository import (
     MensurationRepository,
     UserNotFoundError as MensurationUserNotFoundError,
     DuplicateEventError,
 )
-from app.modules.auth_catalogues.profile.repository import (
+from app.modules.auth_user_profile.profile.repository import (
     ProfileRepository,
     UserNotFoundError as ProfileUserNotFoundError,
 )
-from app.modules.auth_catalogues.events.publishers import (
+from app.modules.auth_user_profile.events.publishers import (
     publish_user_profile_data,
     publish_user_profile_data_error,
 )
 
 if TYPE_CHECKING:
-    from app.modules.auth_catalogues.events.bus import EventBus
+    from app.modules.auth_user_profile.events.bus import EventBus
 
 logger = logging.getLogger(__name__)
 

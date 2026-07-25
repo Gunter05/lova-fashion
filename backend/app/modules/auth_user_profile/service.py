@@ -40,9 +40,9 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth_catalogues import crud
-from app.modules.auth_catalogues.models import CriticalZone, Fabric, Model
-from app.modules.auth_catalogues.schemas import (
+from app.modules.auth_user_profile import crud
+from app.modules.auth_user_profile.models import CriticalZone, Fabric, Model
+from app.modules.auth_user_profile.schemas import (
     FabricItem,
     ModelInitResponse,
     SelectionResponse,
@@ -403,9 +403,9 @@ async def init_model(
 
     Implements: Req 1 AC1–8; design §5.
     """
-    from app.modules.auth_catalogues import ai_client, storage
-    from app.modules.auth_catalogues.ai_client import AILowConfidenceError, AIUnavailableError
-    from app.modules.auth_catalogues.storage import StorageUploadError
+    from app.modules.auth_user_profile import ai_client, storage
+    from app.modules.auth_user_profile.ai_client import AILowConfidenceError, AIUnavailableError
+    from app.modules.auth_user_profile.storage import StorageUploadError
 
     # ── Step 1: Validate image format ────────────────────────────────────────
     # Check MIME type
@@ -573,7 +573,7 @@ def _validate_update_fields(update_data: "ModelUpdateRequest") -> dict:
 
     Implements: Req 4 AC2–5; Req 7 AC5.
     """
-    from app.modules.auth_catalogues.schemas import (
+    from app.modules.auth_user_profile.schemas import (
         CutTypeEnum as SchemaCutTypeEnum,
         GarmentTypeEnum as SchemaGarmentTypeEnum,
         ModelUpdateRequest,

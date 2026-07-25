@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, settings, assume
 from hypothesis import strategies as st
 
-from app.modules.auth_catalogues.auth.security import hash_password, verify_password
+from app.modules.auth_user_profile.auth.security import hash_password, verify_password
 
 
 # ── Strategy: passwords without NULL bytes (bcrypt limitation) ────────────────

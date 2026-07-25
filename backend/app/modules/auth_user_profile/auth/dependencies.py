@@ -19,8 +19,8 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.modules.auth_catalogues.auth.repository import UserRepository
-from app.modules.auth_catalogues.auth.security import (
+from app.modules.auth_user_profile.auth.repository import UserRepository
+from app.modules.auth_user_profile.auth.security import (
     decode_token,
     TokenExpiredError,
     TokenInvalidError,

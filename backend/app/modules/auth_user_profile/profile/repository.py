@@ -18,7 +18,7 @@ from app.db.models import (
     RapportArchiveModel,
     TailorClientAssignmentModel,
 )
-from app.modules.auth_catalogues.auth.schemas import UserRole
+from app.modules.auth_user_profile.auth.schemas import UserRole
 
 
 # ── Domain exceptions ─────────────────────────────────────────────────────────

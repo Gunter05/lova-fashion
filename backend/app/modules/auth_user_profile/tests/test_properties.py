@@ -530,7 +530,7 @@ from unittest.mock import MagicMock, patch
 
 from sqlalchemy import select, text
 
-from app.modules.auth_catalogues.models import Model, ModelSnapshot
+from app.modules.auth_user_profile.models import Model, ModelSnapshot
 
 # ---------------------------------------------------------------------------
 # Module 4 header shortcuts
@@ -581,7 +581,7 @@ _FAKE_PHOTO_URL = "https://storage.example.com/inspiration-images/fake.jpg"
 
 def _mock_ai_success():
     """Return a mock for ai_client.analyze_image that returns high confidence."""
-    from app.modules.auth_catalogues.ai_client import AIAnalysisResult
+    from app.modules.auth_user_profile.ai_client import AIAnalysisResult
     mock = MagicMock(
         return_value=AIAnalysisResult(
             garment_type="Dress",
@@ -595,7 +595,7 @@ def _mock_ai_success():
 
 def _mock_ai_low_confidence(confidence: float = 0.50):
     """Return a mock for ai_client.analyze_image that raises AILowConfidenceError."""
-    from app.modules.auth_catalogues.ai_client import AILowConfidenceError
+    from app.modules.auth_user_profile.ai_client import AILowConfidenceError
     mock = MagicMock(side_effect=AILowConfidenceError(confidence))
     return mock
 
@@ -618,13 +618,13 @@ def _post_init_model(client, *, ai_mock=None, storage_mock=None):
         storage_mock = _mock_storage_success()
 
     with patch(
-        "app.modules.auth_catalogues.service.ai_client.analyze_image",
+        "app.modules.auth_user_profile.service.ai_client.analyze_image",
         ai_mock,
     ), patch(
-        "app.modules.auth_catalogues.service.storage.upload_inspiration_image",
+        "app.modules.auth_user_profile.service.storage.upload_inspiration_image",
         storage_mock,
     ), patch(
-        "app.modules.auth_catalogues.service.storage.delete_image",
+        "app.modules.auth_user_profile.service.storage.delete_image",
         MagicMock(),
     ):
         resp = client.post(
@@ -650,7 +650,7 @@ def _seed_zones(client, db_session) -> list[str]:
     standard 7 zones here if they don't exist yet, then return their IDs.
     """
     import asyncio
-    from app.modules.auth_catalogues.models import CriticalZone
+    from app.modules.auth_user_profile.models import CriticalZone
 
     async def _ensure_zones():
         result = await db_session.execute(select(CriticalZone))
@@ -710,7 +710,7 @@ def _publish_model(client, model_id: str):
 def _patch_model(client, model_id: str, description: str = "updated desc"):
     """PATCH /models/{id} with a description update (triggers snapshot on Published)."""
     with patch(
-        "app.modules.auth_catalogues.service.ai_client.analyze_image",
+        "app.modules.auth_user_profile.service.ai_client.analyze_image",
         _mock_ai_success(),
     ):
         return client.patch(
@@ -798,10 +798,10 @@ def test_p1_3_admin_cannot_init_model(client):
     SHALL return HTTP 403 and SHALL NOT create a MODEL row.
     """
     with patch(
-        "app.modules.auth_catalogues.service.storage.upload_inspiration_image",
+        "app.modules.auth_user_profile.service.storage.upload_inspiration_image",
         _mock_storage_success(),
     ), patch(
-        "app.modules.auth_catalogues.service.ai_client.analyze_image",
+        "app.modules.auth_user_profile.service.ai_client.analyze_image",
         _mock_ai_success(),
     ):
         resp = client.post(
@@ -1132,7 +1132,7 @@ def test_p7_4_snapshot_failure_rolls_back(client, db_session):
         raise SQLAlchemyError("Simulated DB fault during snapshot write")
 
     with patch(
-        "app.modules.auth_catalogues.service.crud.create_snapshot",
+        "app.modules.auth_user_profile.service.crud.create_snapshot",
         side_effect=_failing_create_snapshot,
     ):
         patch_resp = client.patch(

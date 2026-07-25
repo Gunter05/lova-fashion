@@ -31,7 +31,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.modules.auth_catalogues.profile.service import (
+from app.modules.auth_user_profile.profile.service import (
     ProfileService,
     StorageUnavailableError,
     SupabaseStorage,

@@ -7,19 +7,19 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.modules.auth_catalogues.auth.service import (
+from app.modules.auth_user_profile.auth.service import (
     AuthService,
     RegistrationError,
     AuthenticationError,
     AccountDeactivatedError,
     RateLimitError,
 )
-from app.modules.auth_catalogues.auth.schemas import (
+from app.modules.auth_user_profile.auth.schemas import (
     RegisterRequest,
     LoginRequest,
     UserRole,
 )
-from app.modules.auth_catalogues.auth.repository import (
+from app.modules.auth_user_profile.auth.repository import (
     DuplicateCNIError,
     DuplicateEmailError,
 )
@@ -141,10 +141,10 @@ class TestLogin:
         )
         
         with patch.object(auth_service._repo, 'get_by_email', return_value=mock_user), \
-             patch('app.modules.auth_catalogues.auth.service.verify_password', return_value=True), \
-             patch('app.modules.auth_catalogues.auth.service.issue_token', return_value="mock_token"), \
-             patch('app.modules.auth_catalogues.auth.service.rate_limiter.is_locked', return_value=False), \
-             patch('app.modules.auth_catalogues.auth.service.rate_limiter.reset'):
+             patch('app.modules.auth_user_profile.auth.service.verify_password', return_value=True), \
+             patch('app.modules.auth_user_profile.auth.service.issue_token', return_value="mock_token"), \
+             patch('app.modules.auth_user_profile.auth.service.rate_limiter.is_locked', return_value=False), \
+             patch('app.modules.auth_user_profile.auth.service.rate_limiter.reset'):
             
             # Act
             response = await auth_service.login_user(request)
@@ -161,8 +161,8 @@ class TestLogin:
             mot_de_passe="password123"
         )
         
-        with patch('app.modules.auth_catalogues.auth.service.rate_limiter.is_locked', return_value=True), \
-             patch('app.modules.auth_catalogues.auth.service.rate_limiter.retry_after', return_value=600):
+        with patch('app.modules.auth_user_profile.auth.service.rate_limiter.is_locked', return_value=True), \
+             patch('app.modules.auth_user_profile.auth.service.rate_limiter.retry_after', return_value=600):
             
             # Act & Assert
             with pytest.raises(RateLimitError) as exc_info:
@@ -189,9 +189,9 @@ class TestLogin:
         )
         
         with patch.object(auth_service._repo, 'get_by_email', return_value=mock_user), \
-             patch('app.modules.auth_catalogues.auth.service.verify_password', return_value=False), \
-             patch('app.modules.auth_catalogues.auth.service.rate_limiter.is_locked', return_value=False), \
-             patch('app.modules.auth_catalogues.auth.service.rate_limiter.record_failure'):
+             patch('app.modules.auth_user_profile.auth.service.verify_password', return_value=False), \
+             patch('app.modules.auth_user_profile.auth.service.rate_limiter.is_locked', return_value=False), \
+             patch('app.modules.auth_user_profile.auth.service.rate_limiter.record_failure'):
             
             # Act & Assert
             with pytest.raises(AuthenticationError):
@@ -216,8 +216,8 @@ class TestLogin:
         )
         
         with patch.object(auth_service._repo, 'get_by_email', return_value=mock_user), \
-             patch('app.modules.auth_catalogues.auth.service.verify_password', return_value=True), \
-             patch('app.modules.auth_catalogues.auth.service.rate_limiter.is_locked', return_value=False):
+             patch('app.modules.auth_user_profile.auth.service.verify_password', return_value=True), \
+             patch('app.modules.auth_user_profile.auth.service.rate_limiter.is_locked', return_value=False):
             
             # Act & Assert
             with pytest.raises(AccountDeactivatedError):
@@ -239,7 +239,7 @@ class TestLogout:
             "role": "Client"
         }
         
-        with patch('app.modules.auth_catalogues.auth.service.decode_token', return_value=mock_claims), \
+        with patch('app.modules.auth_user_profile.auth.service.decode_token', return_value=mock_claims), \
              patch.object(auth_service._repo, 'add_jti') as mock_add_jti:
             
             # Act

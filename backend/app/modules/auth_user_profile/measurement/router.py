@@ -15,15 +15,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.modules.auth_catalogues.auth.dependencies import (
+from app.modules.auth_user_profile.auth.dependencies import (
     UserClaims,
     require_role,
 )
-from app.modules.auth_catalogues.measurement.schemas import (
+from app.modules.auth_user_profile.measurement.schemas import (
     MensurationCreateRequest,
     MensurationResponse,
 )
-from app.modules.auth_catalogues.measurement.service import MeasurementService
+from app.modules.auth_user_profile.measurement.service import MeasurementService
 
 router = APIRouter()
 

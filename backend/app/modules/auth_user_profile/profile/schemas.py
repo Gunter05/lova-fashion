@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field, EmailStr
-from app.modules.auth_catalogues.auth.schemas import UserRole
+from app.modules.auth_user_profile.auth.schemas import UserRole
 
 
 class UserProfileResponse(BaseModel):

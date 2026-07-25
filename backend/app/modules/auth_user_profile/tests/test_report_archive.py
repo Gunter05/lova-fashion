@@ -21,7 +21,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.modules.auth_catalogues.events.handlers import handle_report_saved
+from app.modules.auth_user_profile.events.handlers import handle_report_saved
 from app.db.models import RapportArchiveModel
 
 

@@ -30,7 +30,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.models import Base, TokenDenylistModel
 from app.db.session import get_db
 from app.main import app
-from app.modules.auth_catalogues.auth.security import issue_token
+from app.modules.auth_user_profile.auth.security import issue_token
 from sqlalchemy import text
 
 # ── In-memory SQLite helpers (identical pattern to test_registration.py) ──────
@@ -204,7 +204,7 @@ def test_logout_is_idempotent(cni: str, role: str, repeat_count: int):
         )
 
     # Invariant: exactly 1 denylist row for this token's jti
-    from app.modules.auth_catalogues.auth.security import decode_token
+    from app.modules.auth_user_profile.auth.security import decode_token
     claims = decode_token(token)
     jti = claims["jti"]
     row_count = _run_sync(
@@ -272,7 +272,7 @@ def test_post_logout_protected_endpoint_returns_401(cni: str, role: str):
     # A different protected endpoint (we'll test with /auth/logout directly as a proxy).
     # The key invariant: the token CANNOT grant access to protected resources.
     # We verify the denylist entry exists so any dependency check would reject it.
-    from app.modules.auth_catalogues.auth.security import decode_token
+    from app.modules.auth_user_profile.auth.security import decode_token
 
 
 def _run_sync(coro):

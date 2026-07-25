@@ -31,7 +31,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.session import get_db
 from app.main import app
-from app.modules.auth_catalogues.auth.security import issue_token
+from app.modules.auth_user_profile.auth.security import issue_token
 
 # ── SQLite helpers ────────────────────────────────────────────────────────────
 
@@ -348,7 +348,7 @@ def test_upload_photo_valid_returns_201():
         return _MOCK_URL
 
     with patch(
-        "app.modules.auth_catalogues.profile.service.SupabaseStorage.upload",
+        "app.modules.auth_user_profile.profile.service.SupabaseStorage.upload",
         new=_mock_upload,
     ):
         with TestClient(app, raise_server_exceptions=False) as c:
@@ -421,7 +421,7 @@ def test_upload_photo_storage_unavailable_returns_503():
     503 and no PhotoProfil record is created.
     Requirements: 7.8
     """
-    from app.modules.auth_catalogues.profile.service import StorageUnavailableError
+    from app.modules.auth_user_profile.profile.service import StorageUnavailableError
 
 
 def _run_sync(coro):
@@ -441,7 +441,7 @@ def _run_sync(coro):
         raise StorageUnavailableError("Storage is down.")
 
     with patch(
-        "app.modules.auth_catalogues.profile.service.SupabaseStorage.upload",
+        "app.modules.auth_user_profile.profile.service.SupabaseStorage.upload",
         new=_broken_upload,
     ):
         with TestClient(app, raise_server_exceptions=False) as c:
@@ -485,7 +485,7 @@ def test_get_photo_history_populated_returns_200():
 
     # Upload one photo first
     with patch(
-        "app.modules.auth_catalogues.profile.service.SupabaseStorage.upload",
+        "app.modules.auth_user_profile.profile.service.SupabaseStorage.upload",
         new=_mock_upload,
     ):
         with TestClient(app, raise_server_exceptions=False) as c:

@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from app.modules.auth_catalogues.auth.rate_limit import RateLimiter, MAX_FAILURES, WINDOW_SECONDS
+from app.modules.auth_user_profile.auth.rate_limit import RateLimiter, MAX_FAILURES, WINDOW_SECONDS
 
 
 @given(failure_count=st.integers(min_value=MAX_FAILURES, max_value=20))

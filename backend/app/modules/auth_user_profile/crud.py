@@ -39,7 +39,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.modules.auth_catalogues.models import (
+from app.modules.auth_user_profile.models import (
     CriticalZone,
     Fabric,
     FabricCategory,
@@ -48,7 +48,7 @@ from app.modules.auth_catalogues.models import (
     ModelSnapshot,
     model_critical_zone_table,
 )
-from app.modules.auth_catalogues.schemas import (
+from app.modules.auth_user_profile.schemas import (
     CategoryCreate,
     CategoryUpdate,
     FabricCreate,

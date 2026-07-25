@@ -11,16 +11,16 @@ import logging
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth_catalogues.measurement.repository import (
+from app.modules.auth_user_profile.measurement.repository import (
     MensurationRepository,
     UserNotFoundError,
 )
-from app.modules.auth_catalogues.measurement.schemas import (
+from app.modules.auth_user_profile.measurement.schemas import (
     MensurationCreateRequest,
     MensurationResponse,
 )
-from app.modules.auth_catalogues.profile.repository import ProfileRepository
-from app.modules.auth_catalogues.auth.repository import UserRepository
+from app.modules.auth_user_profile.profile.repository import ProfileRepository
+from app.modules.auth_user_profile.auth.repository import UserRepository
 
 logger = logging.getLogger(__name__)
 

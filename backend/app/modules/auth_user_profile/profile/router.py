@@ -15,12 +15,12 @@ from fastapi import APIRouter, Depends, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.modules.auth_catalogues.auth.dependencies import (
+from app.modules.auth_user_profile.auth.dependencies import (
     UserClaims,
     get_current_user,
     require_role,
 )
-from app.modules.auth_catalogues.profile.schemas import (
+from app.modules.auth_user_profile.profile.schemas import (
     AdminUserResponse,
     PhotoProfilResponse,
     RapportArchiveResponse,
@@ -28,7 +28,7 @@ from app.modules.auth_catalogues.profile.schemas import (
     UpdateProfileRequest,
     UserProfileResponse,
 )
-from app.modules.auth_catalogues.profile.service import ProfileService
+from app.modules.auth_user_profile.profile.service import ProfileService
 
 router = APIRouter()
 

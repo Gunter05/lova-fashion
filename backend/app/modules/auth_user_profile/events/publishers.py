@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.modules.auth_catalogues.events.bus import EventBus
+    from app.modules.auth_user_profile.events.bus import EventBus
 
 logger = logging.getLogger(__name__)
 

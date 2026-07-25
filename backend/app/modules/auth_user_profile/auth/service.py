@@ -12,19 +12,19 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth_catalogues.auth.repository import (
+from app.modules.auth_user_profile.auth.repository import (
     UserRepository,
     DuplicateCNIError,
     DuplicateEmailError,
 )
-from app.modules.auth_catalogues.auth.schemas import (
+from app.modules.auth_user_profile.auth.schemas import (
     RegisterRequest,
     RegisterResponse,
     LoginRequest,
     LoginResponse,
     UserRole,
 )
-from app.modules.auth_catalogues.auth.security import (
+from app.modules.auth_user_profile.auth.security import (
     hash_password,
     verify_password,
     issue_token,
@@ -33,7 +33,7 @@ from app.modules.auth_catalogues.auth.security import (
     TokenInvalidError,
     JWT_EXPIRY_SECONDS,
 )
-from app.modules.auth_catalogues.auth.rate_limit import rate_limiter
+from app.modules.auth_user_profile.auth.rate_limit import rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ class AuthService:
         Swallows all errors so a bus failure never blocks the login response (Req 2.8).
         """
         try:
-            from app.modules.auth_catalogues.events.bus import event_bus  # lazy import
+            from app.modules.auth_user_profile.events.bus import event_bus  # lazy import
             await event_bus.publish(
                 "user.authenticated",
                 {

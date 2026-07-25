@@ -13,14 +13,14 @@ from typing import Any
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth_catalogues.auth.repository import UserRepository
-from app.modules.auth_catalogues.auth.schemas import UserRole
-from app.modules.auth_catalogues.profile.repository import (
+from app.modules.auth_user_profile.auth.repository import UserRepository
+from app.modules.auth_user_profile.auth.schemas import UserRole
+from app.modules.auth_user_profile.profile.repository import (
     ProfileRepository,
     UserNotFoundError,
     DuplicateEmailError,
 )
-from app.modules.auth_catalogues.profile.schemas import (
+from app.modules.auth_user_profile.profile.schemas import (
     AdminUserResponse,
     PhotoProfilResponse,
     RapportArchiveResponse,

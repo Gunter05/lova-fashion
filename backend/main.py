@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.modules.auth_user_profile.router import router as auth_user_profile_router
 from app.modules.auth_catalogues.router import router as auth_catalogues_router
 
 # Placeholder imports for future module groups:
@@ -17,8 +18,8 @@ async def lifespan(app: FastAPI):
     Handlers are wrapped in session-factory closures so each event delivery
     gets its own AsyncSession (isolation + automatic commit/rollback).
     """
-    from app.modules.auth_catalogues.events.bus import event_bus
-    from app.modules.auth_catalogues.events.handlers import (
+    from app.modules.auth_user_profile.events.bus import event_bus
+    from app.modules.auth_user_profile.events.handlers import (
         make_measurements_handler,
         make_report_saved_handler,
         make_profile_data_request_handler,
@@ -59,7 +60,8 @@ def health():
     return {"status": "ok"}
 
 
-app.include_router(auth_catalogues_router, prefix="/auth-catalogues")
+app.include_router(auth_user_profile_router, prefix="/api/v1")
+app.include_router(auth_catalogues_router, prefix="/api/v1")
 
 # Placeholder router mounts for future module groups:
 # app.include_router(measurements_router, prefix="/measurements")

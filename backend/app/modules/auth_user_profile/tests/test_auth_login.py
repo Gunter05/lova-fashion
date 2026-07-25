@@ -26,7 +26,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.session import get_db
 from app.main import app
-from app.modules.auth_catalogues.auth.rate_limit import rate_limiter
+from app.modules.auth_user_profile.auth.rate_limit import rate_limiter
 
 # ── Shared SQLite helpers ─────────────────────────────────────────────────────
 
@@ -210,7 +210,7 @@ def test_login_jwt_contains_expected_claims(login_client):
 
     Requirements: 2.2, 4.2
     """
-    from app.modules.auth_catalogues.auth.security import decode_token, JWT_EXPIRY_SECONDS
+    from app.modules.auth_user_profile.auth.security import decode_token, JWT_EXPIRY_SECONDS
 
 
 def _run_sync(coro):

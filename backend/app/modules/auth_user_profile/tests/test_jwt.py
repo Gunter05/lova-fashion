@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from app.modules.auth_catalogues.auth.security import (
+from app.modules.auth_user_profile.auth.security import (
     issue_token,
     decode_token,
     JWT_EXPIRY_SECONDS,
@@ -80,7 +80,7 @@ def test_jwt_contains_jti():
 
 def test_jwt_contains_iss():
     """Issued JWT must contain iss claim matching JWT_ISSUER."""
-    from app.modules.auth_catalogues.auth.security import JWT_ISSUER
+    from app.modules.auth_user_profile.auth.security import JWT_ISSUER
     token = issue_token(cni="ABC123456", role="Client")
     claims = decode_token(token)
     assert claims["iss"] == JWT_ISSUER
@@ -88,6 +88,6 @@ def test_jwt_contains_iss():
 
 def test_decode_tampered_token_raises():
     """A tampered token must raise TokenInvalidError."""
-    from app.modules.auth_catalogues.auth.security import TokenInvalidError
+    from app.modules.auth_user_profile.auth.security import TokenInvalidError
     with pytest.raises(TokenInvalidError):
         decode_token("not.a.valid.jwt")

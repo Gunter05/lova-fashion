@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UserModel, TokenDenylistModel
-from app.modules.auth_catalogues.auth.schemas import UserRole
+from app.modules.auth_user_profile.auth.schemas import UserRole
 
 
 # ── Domain exceptions ─────────────────────────────────────────────────────────
