@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Header, Query, Resp
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.db.session import get_db
 from app.modules.auth_catalogues import crud, service
 from app.modules.auth_catalogues.dependencies import (
     get_current_role,

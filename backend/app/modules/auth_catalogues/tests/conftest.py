@@ -22,7 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base
+from app.db.session import Base, get_db
 from app.modules.auth_catalogues.router import router
 
 # ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ def client(db_session):
     session.  The `get_db` dependency is overridden so no real DB connection
     is needed.
     """
-    from app.database import get_db
+    from app.db.session import get_db
 
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")

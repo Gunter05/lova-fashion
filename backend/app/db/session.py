@@ -2,27 +2,60 @@
 Database session factory for async SQLAlchemy.
 Configured from the DATABASE_URL environment variable.
 
-In test environments where DATABASE_URL is not set, a no-op SQLite URL is used
-so the module can be imported without crashing.  Tests override get_db via
-FastAPI dependency_overrides and never actually use this engine.
+The engine is created lazily on first access so the module can be imported
+safely in test environments without a real database URL.
+Tests override get_db via FastAPI dependency_overrides.
 """
 import os
+from typing import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
-# Fall back to an in-memory SQLite URL so the module can be safely imported
-# in test environments where DATABASE_URL is not configured.
-# The real PostgreSQL URL must be provided in production via the DATABASE_URL
-# environment variable.
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "sqlite+aiosqlite:///:memory:",  # safe import-time fallback for tests
-)
+# ---------------------------------------------------------------------------
+# URL resolution
+# ---------------------------------------------------------------------------
+
+def _resolve_db_url() -> str:
+    """
+    Return the database URL, normalising the driver prefix for asyncpg.
+
+    Render and Supabase provide URLs in the form:
+        postgresql://user:pass@host/db
+    SQLAlchemy's async engine requires:
+        postgresql+asyncpg://user:pass@host/db
+
+    Falls back to in-memory SQLite only when DATABASE_URL is not set,
+    which happens exclusively in local unit-test environments.
+    """
+    url = os.environ.get("DATABASE_URL", "")
+
+    if not url:
+        # Unit-test fallback — never reached in production because Render
+        # requires DATABASE_URL to be set before the service starts.
+        return "sqlite+aiosqlite:///:memory:"
+
+    # Rewrite sync postgres:// → postgresql+asyncpg://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    return url
+
+
+DATABASE_URL: str = _resolve_db_url()
+
+# ---------------------------------------------------------------------------
+# Engine & session factory — created once at import time.
+# SQLAlchemy does NOT open a real connection here; the pool connects lazily.
+# ---------------------------------------------------------------------------
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=False,  # set True for SQL debug logging
+    echo=False,      # set True locally for SQL debug logging
     future=True,
+    pool_pre_ping=True,   # drop stale connections automatically
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -33,12 +66,22 @@ AsyncSessionLocal = async_sessionmaker(
     autocommit=False,
 )
 
+
+# ---------------------------------------------------------------------------
+# ORM base
+# ---------------------------------------------------------------------------
+
 class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy ORM models."""
+    """Shared declarative base for all SQLAlchemy ORM models."""
     __allow_unmapped__ = True
 
-async def get_db() -> AsyncSession:
-    """FastAPI dependency that yields an async database session."""
+
+# ---------------------------------------------------------------------------
+# FastAPI dependency
+# ---------------------------------------------------------------------------
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Yield a request-scoped async database session."""
     async with AsyncSessionLocal() as session:
         try:
             yield session
