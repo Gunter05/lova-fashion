@@ -942,18 +942,10 @@ async def _sqlite_persist_evaluation(
 
     This version uses `begin_nested()` (SAVEPOINT) so it works inside
     an already-active transaction, as is the case in all M6 tests.
-
-    After persisting, the evaluation is re-fetched with selectinload so
-    that `evaluation.risk_zones` is a plain Python list (not a lazy
-    relationship) — required because the service passes the ORM object
-    directly to `VerdictEvaluationResponse.model_validate()`, which
-    accesses `risk_zones` synchronously via Pydantic.
     """
     import logging
     from fastapi import HTTPException, status
-    from sqlalchemy import select
     from sqlalchemy.exc import IntegrityError
-    from sqlalchemy.orm import selectinload
     from app.modules.business_rules.models import VerdictEvaluation, RiskZone
 
     logger = logging.getLogger(__name__)
@@ -966,43 +958,18 @@ async def _sqlite_persist_evaluation(
                 await db.flush()
 
                 for rz in risk_zones:
-                    # rule_id and zone_id may arrive as 32-char hex strings
-                    # from _sqlite_load_active_rules (raw SQL rows).
-                    # RiskZone.rule_id/zone_id are UUID(as_uuid=True) columns,
-                    # so SQLAlchemy requires actual uuid.UUID objects, not strings.
-                    def _to_uuid(v):
-                        if v is None:
-                            return None
-                        if isinstance(v, uuid.UUID):
-                            return v
-                        try:
-                            return uuid.UUID(str(v))
-                        except (ValueError, AttributeError):
-                            return None
-
                     db.add(
                         RiskZone(
                             evaluation_id=evaluation.evaluation_id,
-                            rule_id=_to_uuid(rz.rule_id),
-                            zone_id=_to_uuid(rz.zone_id),
+                            rule_id=rz.rule_id,
+                            zone_id=rz.zone_id,
                             calculated_variance=rz.calculated_variance,
                             localized_verdict=rz.localized_verdict,
                             explanation=rz.explanation,
                             rule_version=rz.rule_version,
                         )
                     )
-                evaluation_id = evaluation.evaluation_id
-
-            # Re-fetch with selectinload so risk_zones is already populated
-            # as a plain list (avoids MissingGreenlet when Pydantic validates)
-            stmt = (
-                select(VerdictEvaluation)
-                .where(VerdictEvaluation.evaluation_id == evaluation_id)
-                .options(selectinload(VerdictEvaluation.risk_zones))
-            )
-            result = await db.execute(stmt)
-            loaded_evaluation = result.scalars().first()
-            return loaded_evaluation
+            return evaluation
 
         except IntegrityError as exc:
             if attempt == 0 and "evaluation_id" in str(exc).lower():

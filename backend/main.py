@@ -85,3 +85,6 @@ app.include_router(auth_catalogues_router, prefix="/api/v1", tags=["models"])
 
 # Module 6 — Compatibility Engine
 app.include_router(compatibility_router, prefix="/api/v1/compatibility", tags=["compatibility"])
+
+# Module 6 — Compatibility Engine
+app.include_router(compatibility_router, prefix="/api/v1/compatibility", tags=["compatibility"])
