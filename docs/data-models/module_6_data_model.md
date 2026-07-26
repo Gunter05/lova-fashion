@@ -89,5 +89,3 @@
 | morphology_id | string (FK) | References **MORPHOLOGY** |
 | suitability_score | string | e.g., Ideal, Flattering, Avoid |
 
-
-Does this file correspond to the one that you provided ?
