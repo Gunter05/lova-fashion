@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app.modules.measurements.router import router as measurements_router
-from app.modules.business_rules.router import router as ease_router
+from app.modules.business_rules.router import router as ease_router, compatibility_router
 from app.modules.auth_catalogues.router import router as auth_catalogues_router
 
 app = FastAPI(title="Remote Custom-Fit Styling — AWS re:Deploy 2026")
@@ -18,3 +18,6 @@ app.include_router(ease_router, prefix="/api/v1/ease", tags=["ease-allowance"])
 # Module 4 endpoints are mounted at /api/v1/models (within the router itself)
 # Module 3 fabric/category endpoints are also served through this router
 app.include_router(auth_catalogues_router, prefix="/api/v1", tags=["models"])
+
+# Module 6 — Compatibility Engine
+app.include_router(compatibility_router, prefix="/api/v1/compatibility", tags=["compatibility"])

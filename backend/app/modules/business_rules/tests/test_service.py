@@ -343,3 +343,517 @@ async def test_s12_adjusted_values_never_negative(client, db_session):
     assert body["bust"]["adjusted_cm"]  >= 0.0
     assert body["waist"]["adjusted_cm"] >= 0.0
     assert body["hips"]["adjusted_cm"]  >= 0.0
+
+
+# ===========================================================================
+# Module 6 — CompatibilityService integration tests
+# ===========================================================================
+# Tests M6-S1 through M6-S6 exercise CompatibilityService.verify() directly
+# (not via HTTP) using the in-memory SQLite session from the db_session fixture.
+# Each test seeds all prerequisites, commits, calls verify(), then asserts on
+# the returned VerdictEvaluationResponse and the persisted DB rows.
+#
+# SQLite stores UUID(as_uuid=True) columns as 32-char hex (no hyphens) via
+# value.hex.  The production service helpers pass str(uuid) which includes
+# hyphens, causing raw-SQL WHERE clauses to miss every row.  We patch the
+# three affected helpers with SQLite-compatible equivalents from conftest.
+# ===========================================================================
+
+import app.modules.business_rules.service as _br6_service
+from app.modules.business_rules.tests.conftest import (
+    seed_compatibility_rule,
+    seed_model,
+    seed_model_fabric_link,
+    seed_model_morphology,
+    _sqlite_load_fabric_or_422,
+    _sqlite_load_active_rules,
+    _sqlite_check_fabric_link,
+    _sqlite_check_morphology_link,
+    _sqlite_load_model_or_422,
+    _sqlite_persist_evaluation,
+)
+
+
+def _m6_patches():
+    """
+    Return the three patches needed to make Module 6 service helpers
+    work correctly against in-memory SQLite.
+    """
+    return [
+        patch.object(_br6_service, "_load_fabric_or_422", _sqlite_load_fabric_or_422),
+        patch.object(_br6_service, "_load_active_rules", _sqlite_load_active_rules),
+        patch.object(_br6_service, "_check_fabric_link", _sqlite_check_fabric_link),
+        patch.object(_br6_service, "_check_morphology_link", _sqlite_check_morphology_link),
+        patch.object(_br6_service, "_load_model_or_422", _sqlite_load_model_or_422),
+        patch.object(_br6_service, "_persist_evaluation", _sqlite_persist_evaluation),
+    ]
+
+
+def _make_adjustment(db_session, adj_id, session_id, fabric_id):
+    """
+    Helper: insert a MeasurementAdjustment with realistic non-zero adjusted values.
+    Returns the inserted MeasurementAdjustment ORM object.
+    """
+    from decimal import Decimal
+    from app.modules.business_rules.models import MeasurementAdjustment
+
+    adj = MeasurementAdjustment(
+        id=adj_id,
+        session_id=session_id,
+        fabric_id=fabric_id,
+        raw_bust_cm=Decimal("90.0"),
+        raw_waist_cm=Decimal("70.0"),
+        raw_hips_cm=Decimal("95.0"),
+        bust_ease_cm=Decimal("4.0"),
+        waist_ease_cm=Decimal("4.0"),
+        hips_ease_cm=Decimal("4.0"),
+        adjusted_bust_cm=Decimal("94.0"),
+        adjusted_waist_cm=Decimal("74.0"),
+        adjusted_hips_cm=Decimal("99.0"),
+        ease_source="rule",
+    )
+    db_session.add(adj)
+    return adj
+
+
+async def _seed_body_shape(db_session, morphology_id):
+    """Insert a BodyShape whose code equals str(morphology_id)."""
+    from app.modules.measurements.models import BodyShape
+
+    db_session.add(BodyShape(code=str(morphology_id), name="Test Morphology"))
+    await db_session.flush()
+
+
+# ---------------------------------------------------------------------------
+# M6-S1 — Compatible: rule never fires → global_status == "Compatible"
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_m6_s1_compatible(db_session):
+    """
+    Seed a rule whose condition never fires (value > 9999.0).
+    verify() must return global_status="Compatible", risk_zones=[],
+    and persist exactly one VerdictEvaluation row.
+    """
+    from sqlalchemy import select
+    from app.modules.business_rules.models import VerdictEvaluation
+    from app.modules.business_rules.schemas import VerificationRequest
+    from app.modules.business_rules.service import CompatibilityService
+
+    user_id = uuid.uuid4()
+    morphology_id = uuid.uuid4()
+    adj_id = uuid.uuid4()
+
+    await _seed_body_shape(db_session, morphology_id)
+
+    sid = await seed_session(db_session, user_id)
+    await seed_raw_measurement(db_session, sid)
+    fid = await seed_fabric(db_session, rigidity="rigid")
+    model = await seed_model(db_session, cut_type="Fitted")
+    await seed_model_fabric_link(db_session, model.model_id, fid)
+    _make_adjustment(db_session, adj_id, sid, fid)
+
+    # Rule that never fires
+    await seed_compatibility_rule(
+        db_session,
+        cut_type="Fitted",
+        fabric_property="rigid",
+        zone_name="bust",
+        condition="value > 9999.0",
+        severity="Reserve",
+        explanation="Never-fire test rule",
+        admin_id=uuid.uuid4(),
+    )
+
+    await db_session.commit()
+
+    request = VerificationRequest(
+        adjustment_id=adj_id,
+        model_id=model.model_id,
+        fabric_id=fid,
+        morphology_id=morphology_id,
+        client_id=user_id,
+    )
+
+    patches = _m6_patches()
+    for p in patches:
+        p.start()
+    try:
+        result = await CompatibilityService.verify(request, user_id, db_session)
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert result.global_status == "Compatible"
+    assert result.risk_zones == []
+
+    # Verify DB persistence
+    rows = (await db_session.execute(select(VerdictEvaluation))).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].global_status == "Compatible"
+
+
+# ---------------------------------------------------------------------------
+# M6-S2 — Compatible_with_Reservations: Reserve rule always fires
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_m6_s2_compatible_with_reservations(db_session):
+    """
+    Seed a Reserve rule whose condition always fires (value > 0.0).
+    verify() must return global_status="Compatible_with_Reservations",
+    len(risk_zones) == 1, risk_zones[0].localized_verdict == "Reserve",
+    and persist both VerdictEvaluation and RiskZone rows.
+    """
+    from sqlalchemy import select
+    from app.modules.business_rules.models import VerdictEvaluation, RiskZone
+    from app.modules.business_rules.schemas import VerificationRequest
+    from app.modules.business_rules.service import CompatibilityService
+
+    user_id = uuid.uuid4()
+    morphology_id = uuid.uuid4()
+    adj_id = uuid.uuid4()
+
+    await _seed_body_shape(db_session, morphology_id)
+
+    sid = await seed_session(db_session, user_id)
+    await seed_raw_measurement(db_session, sid)
+    fid = await seed_fabric(db_session, rigidity="rigid")
+    model = await seed_model(db_session, cut_type="Fitted")
+    await seed_model_fabric_link(db_session, model.model_id, fid)
+    _make_adjustment(db_session, adj_id, sid, fid)
+
+    # Reserve rule that always fires
+    await seed_compatibility_rule(
+        db_session,
+        cut_type="Fitted",
+        fabric_property="rigid",
+        zone_name="bust",
+        condition="value > 0.0",
+        severity="Reserve",
+        explanation="Always-fire Reserve rule",
+        admin_id=uuid.uuid4(),
+    )
+
+    await db_session.commit()
+
+    request = VerificationRequest(
+        adjustment_id=adj_id,
+        model_id=model.model_id,
+        fabric_id=fid,
+        morphology_id=morphology_id,
+        client_id=user_id,
+    )
+
+    patches = _m6_patches()
+    for p in patches:
+        p.start()
+    try:
+        result = await CompatibilityService.verify(request, user_id, db_session)
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert result.global_status == "Compatible_with_Reservations"
+    assert len(result.risk_zones) == 1
+    assert result.risk_zones[0].localized_verdict == "Reserve"
+
+    # Verify DB persistence — VerdictEvaluation row
+    eval_rows = (await db_session.execute(select(VerdictEvaluation))).scalars().all()
+    assert len(eval_rows) == 1
+    assert eval_rows[0].global_status == "Compatible_with_Reservations"
+
+    # Verify DB persistence — RiskZone row
+    rz_rows = (await db_session.execute(select(RiskZone))).scalars().all()
+    assert len(rz_rows) == 1
+    assert rz_rows[0].localized_verdict == "Reserve"
+
+
+# ---------------------------------------------------------------------------
+# M6-S3 — Incompatible: Incompatible rule always fires
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_m6_s3_incompatible(db_session):
+    """
+    Seed an Incompatible rule whose condition always fires (value > 0.0).
+    verify() must return global_status="Incompatible" and
+    risk_zones[0].localized_verdict == "Incompatible".
+    """
+    from sqlalchemy import select
+    from app.modules.business_rules.models import VerdictEvaluation
+    from app.modules.business_rules.schemas import VerificationRequest
+    from app.modules.business_rules.service import CompatibilityService
+
+    user_id = uuid.uuid4()
+    morphology_id = uuid.uuid4()
+    adj_id = uuid.uuid4()
+
+    await _seed_body_shape(db_session, morphology_id)
+
+    sid = await seed_session(db_session, user_id)
+    await seed_raw_measurement(db_session, sid)
+    fid = await seed_fabric(db_session, rigidity="rigid")
+    model = await seed_model(db_session, cut_type="Fitted")
+    await seed_model_fabric_link(db_session, model.model_id, fid)
+    _make_adjustment(db_session, adj_id, sid, fid)
+
+    # Incompatible rule that always fires
+    await seed_compatibility_rule(
+        db_session,
+        cut_type="Fitted",
+        fabric_property="rigid",
+        zone_name="bust",
+        condition="value > 0.0",
+        severity="Incompatible",
+        explanation="Always-fire Incompatible rule",
+        admin_id=uuid.uuid4(),
+    )
+
+    await db_session.commit()
+
+    request = VerificationRequest(
+        adjustment_id=adj_id,
+        model_id=model.model_id,
+        fabric_id=fid,
+        morphology_id=morphology_id,
+        client_id=user_id,
+    )
+
+    patches = _m6_patches()
+    for p in patches:
+        p.start()
+    try:
+        result = await CompatibilityService.verify(request, user_id, db_session)
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert result.global_status == "Incompatible"
+    assert len(result.risk_zones) == 1
+    assert result.risk_zones[0].localized_verdict == "Incompatible"
+
+    # Verify DB persistence
+    rows = (await db_session.execute(select(VerdictEvaluation))).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].global_status == "Incompatible"
+
+
+# ---------------------------------------------------------------------------
+# M6-S4 — Indeterminate: no rules seeded → missing_data_log populated
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_m6_s4_indeterminate_no_rules(db_session):
+    """
+    Seed NO compatibility rules.
+    verify() must return global_status="Indeterminate", risk_zones=[],
+    and the persisted VerdictEvaluation must have a non-empty missing_data_log.
+    """
+    from sqlalchemy import select
+    from app.modules.business_rules.models import VerdictEvaluation
+    from app.modules.business_rules.schemas import VerificationRequest
+    from app.modules.business_rules.service import CompatibilityService
+
+    user_id = uuid.uuid4()
+    morphology_id = uuid.uuid4()
+    adj_id = uuid.uuid4()
+
+    await _seed_body_shape(db_session, morphology_id)
+
+    sid = await seed_session(db_session, user_id)
+    await seed_raw_measurement(db_session, sid)
+    fid = await seed_fabric(db_session, rigidity="rigid")
+    model = await seed_model(db_session, cut_type="Fitted")
+    await seed_model_fabric_link(db_session, model.model_id, fid)
+    _make_adjustment(db_session, adj_id, sid, fid)
+
+    # Intentionally seed NO rules
+
+    await db_session.commit()
+
+    request = VerificationRequest(
+        adjustment_id=adj_id,
+        model_id=model.model_id,
+        fabric_id=fid,
+        morphology_id=morphology_id,
+        client_id=user_id,
+    )
+
+    patches = _m6_patches()
+    for p in patches:
+        p.start()
+    try:
+        result = await CompatibilityService.verify(request, user_id, db_session)
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert result.global_status == "Indeterminate"
+    assert result.risk_zones == []
+
+    # Verify DB persistence — missing_data_log must be non-empty
+    rows = (await db_session.execute(select(VerdictEvaluation))).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].global_status == "Indeterminate"
+    assert rows[0].missing_data_log is not None
+    assert len(rows[0].missing_data_log) > 0
+
+
+# ---------------------------------------------------------------------------
+# M6-S5 — Fabric link absent → Reserve RiskZone added (rule_id == None)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_m6_s5_fabric_link_absent_reserve(db_session):
+    """
+    Seed a never-fire rule; do NOT call seed_model_fabric_link.
+    verify() must return global_status="Compatible_with_Reservations" and
+    exactly one Reserve RiskZone with rule_id == None (fabric-link check).
+    """
+    from sqlalchemy import select
+    from app.modules.business_rules.models import VerdictEvaluation, RiskZone
+    from app.modules.business_rules.schemas import VerificationRequest
+    from app.modules.business_rules.service import CompatibilityService
+
+    user_id = uuid.uuid4()
+    morphology_id = uuid.uuid4()
+    adj_id = uuid.uuid4()
+
+    await _seed_body_shape(db_session, morphology_id)
+
+    sid = await seed_session(db_session, user_id)
+    await seed_raw_measurement(db_session, sid)
+    fid = await seed_fabric(db_session, rigidity="rigid")
+    model = await seed_model(db_session, cut_type="Fitted")
+    # Intentionally omit: await seed_model_fabric_link(db_session, model.model_id, fid)
+    _make_adjustment(db_session, adj_id, sid, fid)
+
+    # Rule that never fires (condition is never true)
+    await seed_compatibility_rule(
+        db_session,
+        cut_type="Fitted",
+        fabric_property="rigid",
+        zone_name="bust",
+        condition="value > 9999.0",
+        severity="Reserve",
+        explanation="Never-fire rule",
+        admin_id=uuid.uuid4(),
+    )
+
+    await db_session.commit()
+
+    request = VerificationRequest(
+        adjustment_id=adj_id,
+        model_id=model.model_id,
+        fabric_id=fid,
+        morphology_id=morphology_id,
+        client_id=user_id,
+    )
+
+    patches = _m6_patches()
+    for p in patches:
+        p.start()
+    try:
+        result = await CompatibilityService.verify(request, user_id, db_session)
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert result.global_status == "Compatible_with_Reservations"
+    # Exactly one risk zone added by the fabric-link check
+    assert len(result.risk_zones) == 1
+    fabric_rz = result.risk_zones[0]
+    assert fabric_rz.localized_verdict == "Reserve"
+    assert fabric_rz.rule_id is None
+
+    # Verify DB persistence
+    rows = (await db_session.execute(select(VerdictEvaluation))).scalars().all()
+    assert len(rows) == 1
+    rz_rows = (await db_session.execute(select(RiskZone))).scalars().all()
+    assert len(rz_rows) == 1
+    assert rz_rows[0].rule_id is None
+
+
+# ---------------------------------------------------------------------------
+# M6-S6 — Morphology Avoid → Reserve RiskZone added (zone_id == None)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_m6_s6_morphology_avoid_reserve(db_session):
+    """
+    Seed a never-fire rule, seed fabric link, seed a ModelMorphology row with
+    suitability_score="Avoid".
+    verify() must return global_status="Compatible_with_Reservations" and
+    exactly one Reserve RiskZone with zone_id == None (morphology check).
+    """
+    from sqlalchemy import select
+    from app.modules.business_rules.models import VerdictEvaluation, RiskZone
+    from app.modules.business_rules.schemas import VerificationRequest
+    from app.modules.business_rules.service import CompatibilityService
+
+    user_id = uuid.uuid4()
+    morphology_id = uuid.uuid4()
+    adj_id = uuid.uuid4()
+
+    await _seed_body_shape(db_session, morphology_id)
+
+    sid = await seed_session(db_session, user_id)
+    await seed_raw_measurement(db_session, sid)
+    fid = await seed_fabric(db_session, rigidity="rigid")
+    model = await seed_model(db_session, cut_type="Fitted")
+    await seed_model_fabric_link(db_session, model.model_id, fid)
+    _make_adjustment(db_session, adj_id, sid, fid)
+
+    # Seed ModelMorphology with score="Avoid"
+    await seed_model_morphology(
+        db_session,
+        model_id=model.model_id,
+        morphology_id=morphology_id,
+        score="Avoid",
+    )
+
+    # Rule that never fires
+    await seed_compatibility_rule(
+        db_session,
+        cut_type="Fitted",
+        fabric_property="rigid",
+        zone_name="bust",
+        condition="value > 9999.0",
+        severity="Reserve",
+        explanation="Never-fire rule",
+        admin_id=uuid.uuid4(),
+    )
+
+    await db_session.commit()
+
+    request = VerificationRequest(
+        adjustment_id=adj_id,
+        model_id=model.model_id,
+        fabric_id=fid,
+        morphology_id=morphology_id,
+        client_id=user_id,
+    )
+
+    patches = _m6_patches()
+    for p in patches:
+        p.start()
+    try:
+        result = await CompatibilityService.verify(request, user_id, db_session)
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert result.global_status == "Compatible_with_Reservations"
+    # Exactly one risk zone added by the morphology check
+    assert len(result.risk_zones) == 1
+    morph_rz = result.risk_zones[0]
+    assert morph_rz.localized_verdict == "Reserve"
+    assert morph_rz.zone_id is None
+
+    # Verify DB persistence
+    rows = (await db_session.execute(select(VerdictEvaluation))).scalars().all()
+    assert len(rows) == 1
+    rz_rows = (await db_session.execute(select(RiskZone))).scalars().all()
+    assert len(rz_rows) == 1
+    assert rz_rows[0].zone_id is None
