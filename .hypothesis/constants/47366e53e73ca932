@@ -1,0 +1,4 @@
+# file: C:\Users\Gunter_2\Desktop\work\lova-fashion\backend\app\modules\measurements\models.py
+# hypothesis_version: 6.158.1
+
+[100, 'BodyShape', 'CASCADE', 'CaptureSession', 'RawMeasurement', 'all, delete-orphan', 'body_shape', 'body_shapes', 'body_shapes.code', 'capture_sessions', 'capture_sessions.id', 'empty', 'measurement', 'measurements', 'raw_measurements', 'session', 'session_id']

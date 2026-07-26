@@ -1,0 +1,4 @@
+# file: C:\Users\Gunter_2\Desktop\work\lova-fashion\backend\app\modules\business_rules\service.py
+# hypothesis_version: 6.158.1
+
+[0.0, 200, 300, 'Accepted', 'Avoid', 'Compatible', 'Failed', 'Incompatible', 'Indeterminate', 'Reserve', 'Tissu supprimé', 'adjusted_bust_cm', 'adjusted_hips_cm', 'adjusted_waist_cm', 'adjustment', 'available', 'bust', 'bust_ease_cm', 'cut_type', 'ease_source', 'elasticity_category', 'evaluation_id', 'explanation_message', 'fabric_id', 'fabric_name', 'fabric_property', 'fabric_status', 'hips', 'hips_ease_cm', 'model_id', 'morphology_id', 'now()', 'raw_bust_cm', 'raw_hips_cm', 'raw_waist_cm', 'rigid', 'rule_id', 'severity_level', 'success', 'suitability_score', 'value', 'version', 'waist', 'waist_ease_cm', 'zone_id', 'zone_name']

@@ -85,7 +85,7 @@ from app.modules.measurements.models import Base as MeasBase
 # Shared test user
 # ---------------------------------------------------------------------------
 
-TEST_USER_ID = uuid.uuid4()
+TEST_USER_ID = uuid.UUID("aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa")
 
 # ---------------------------------------------------------------------------
 # In-memory SQLite engine
@@ -942,34 +942,62 @@ async def _sqlite_persist_evaluation(
 
     This version uses `begin_nested()` (SAVEPOINT) so it works inside
     an already-active transaction, as is the case in all M6 tests.
+
+    After the savepoint commits, the ORM object's relationships are expired.
+    We explicitly reload the evaluation with selectin-loaded risk_zones so
+    that VerdictEvaluationResponse.model_validate() can access them without
+    triggering a greenlet IO error.
     """
     import logging
     from fastapi import HTTPException, status
+    from sqlalchemy import select
     from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.orm import selectinload
     from app.modules.business_rules.models import VerdictEvaluation, RiskZone
 
     logger = logging.getLogger(__name__)
 
     for attempt in range(2):
         try:
+            evaluation_id = eval_data.get("evaluation_id") or uuid.uuid4()
             async with db.begin_nested():
-                evaluation = VerdictEvaluation(**eval_data)
+                evaluation = VerdictEvaluation(**{**eval_data, "evaluation_id": evaluation_id})
                 db.add(evaluation)
                 await db.flush()
 
                 for rz in risk_zones:
+                    # SQLite raw-SQL queries return UUIDs as hex strings (no
+                    # hyphens).  UUID(as_uuid=True) columns require uuid.UUID
+                    # objects, so coerce str → UUID when necessary.
+                    def _to_uuid_or_none(v):
+                        if v is None:
+                            return None
+                        if isinstance(v, uuid.UUID):
+                            return v
+                        try:
+                            return uuid.UUID(str(v))
+                        except (ValueError, AttributeError):
+                            return None
+
                     db.add(
                         RiskZone(
                             evaluation_id=evaluation.evaluation_id,
-                            rule_id=rz.rule_id,
-                            zone_id=rz.zone_id,
+                            rule_id=_to_uuid_or_none(rz.rule_id),
+                            zone_id=_to_uuid_or_none(rz.zone_id),
                             calculated_variance=rz.calculated_variance,
                             localized_verdict=rz.localized_verdict,
                             explanation=rz.explanation,
                             rule_version=rz.rule_version,
                         )
                     )
-            return evaluation
+            # Savepoint committed — reload with eager risk_zones to avoid
+            # greenlet IO error when model_validate accesses the relationship.
+            result = await db.execute(
+                select(VerdictEvaluation)
+                .where(VerdictEvaluation.evaluation_id == evaluation_id)
+                .options(selectinload(VerdictEvaluation.risk_zones))
+            )
+            return result.scalars().first()
 
         except IntegrityError as exc:
             if attempt == 0 and "evaluation_id" in str(exc).lower():

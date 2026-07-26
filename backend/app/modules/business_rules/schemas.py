@@ -30,9 +30,9 @@ class ZoneDetail(BaseModel):
     Raw + ease + adjusted value for one measurement zone.
     Provides full transparency per zone (AC-03.1).
     """
-    raw_cm: Decimal = Field(..., description="Raw measurement from CV pipeline (cm).")
-    ease_cm: Decimal = Field(..., description="Ease delta applied to this zone (cm). Can be negative for stretch fabrics.")
-    adjusted_cm: Decimal = Field(..., description="Final adjusted cutting measurement (cm), clamped ≥ 0.")
+    raw_cm: float = Field(..., description="Raw measurement from CV pipeline (cm).")
+    ease_cm: float = Field(..., description="Ease delta applied to this zone (cm). Can be negative for stretch fabrics.")
+    adjusted_cm: float = Field(..., description="Final adjusted cutting measurement (cm), clamped ≥ 0.")
 
     model_config = {"from_attributes": True}
 
@@ -80,9 +80,9 @@ class AdjustmentSummary(BaseModel):
     fabric_name: str
     elasticity_category: str | None
     ease_source: str
-    adjusted_bust_cm: Decimal
-    adjusted_waist_cm: Decimal
-    adjusted_hips_cm: Decimal
+    adjusted_bust_cm: float
+    adjusted_waist_cm: float
+    adjusted_hips_cm: float
     calculated_at: datetime
 
     model_config = {"from_attributes": True}
