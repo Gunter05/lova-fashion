@@ -432,3 +432,380 @@ def test_re10_rule_version_copied_to_output(version):
     result = evaluator.evaluate(_make_input(rules=[rule], measurements={"bust": 50.0}))
     assert len(result) == 1
     assert result[0].rule_version == version
+
+
+# ===========================================================================
+# Module 6 — Property-Based Tests (Hypothesis)
+# ===========================================================================
+#
+# **Validates: Requirements 3.9, 8.3**
+#
+# Property 1: Determinism — same inputs always produce an identical
+# list[RiskZoneDict] on every call to RuleEvaluator.evaluate().
+# ===========================================================================
+
+import uuid as _uuid_pbt
+
+from hypothesis import given, settings, HealthCheck
+from hypothesis import strategies as st
+
+# ---------------------------------------------------------------------------
+# Shared Hypothesis settings for Module 6 PBT
+# ---------------------------------------------------------------------------
+
+M6_PBT_SETTINGS = settings(
+    max_examples=200,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+    deadline=None,
+)
+
+# ---------------------------------------------------------------------------
+# Strategies
+# ---------------------------------------------------------------------------
+
+# zone_measurements: dict with exactly the three canonical keys, float values ≥ 0.0
+zone_measurements_st = st.fixed_dictionaries({
+    "bust":  st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+    "waist": st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+    "hips":  st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+})
+
+# severity: one of the two valid severity_level literals
+severity_st = st.sampled_from(["Incompatible", "Reserve"])
+
+
+# ---------------------------------------------------------------------------
+# Property 1: Determinism (Requirements 3.9, 8.3)
+# ---------------------------------------------------------------------------
+
+@M6_PBT_SETTINGS
+@given(zone_measurements=zone_measurements_st, severity=severity_st)
+def test_p1_determinism(zone_measurements: dict, severity: str) -> None:
+    """
+    **Validates: Requirements 3.9, 8.3**
+
+    Property 1 — Determinism:
+    For any well-formed zone_measurements dict and severity value, calling
+    RuleEvaluator().evaluate() twice with identical inputs must return
+    exactly the same list[RiskZoneDict] both times.
+
+    Two rule variants are included so that both the "condition fires" and
+    "condition never fires" code paths are exercised across the generated
+    inputs:
+      - rule_always fires when value > 0.0  (fires for any measurement > 0)
+      - rule_never  fires when value > 999999.0  (never fires in practice)
+    """
+    _evaluator = RuleEvaluator()
+    shared_zone_id = _uuid_pbt.uuid4()
+
+    rules = [
+        RuleRecord(
+            rule_id=_uuid_pbt.uuid4(),
+            zone_id=shared_zone_id,
+            zone_name="bust",
+            mathematical_condition="value > 0.0",
+            severity_level=severity,
+            explanation_message="Condition always-fire pour test déterminisme.",
+            version=1,
+        ),
+        RuleRecord(
+            rule_id=_uuid_pbt.uuid4(),
+            zone_id=shared_zone_id,
+            zone_name="waist",
+            mathematical_condition="value > 999999.0",
+            severity_level=severity,
+            explanation_message="Condition never-fire pour test déterminisme.",
+            version=1,
+        ),
+    ]
+
+    inp = RuleInput(
+        rules=rules,
+        zone_measurements=zone_measurements,
+        critical_zone_ids=[shared_zone_id],
+    )
+
+    result_1 = _evaluator.evaluate(inp)
+    result_2 = _evaluator.evaluate(inp)
+
+    assert result_1 == result_2, (
+        f"RuleEvaluator is non-deterministic: first call returned {result_1!r}, "
+        f"second call returned {result_2!r} for the same input."
+    )
+
+
+# ===========================================================================
+# Module 6 — RuleEvaluator property-based tests (Hypothesis)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Shared Hypothesis strategies for Module 6 PBTs
+# ---------------------------------------------------------------------------
+
+zone_measurements = st.fixed_dictionaries({
+    "bust":  st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+    "waist": st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+    "hips":  st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+})
+
+MODULE6_PBT_SETTINGS = settings(
+    max_examples=200,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+    deadline=None,
+)
+
+# ---------------------------------------------------------------------------
+# P3 — Empty rules list always returns []
+# Validates: Requirement 8.1
+# ---------------------------------------------------------------------------
+
+@MODULE6_PBT_SETTINGS
+@given(measurements=zone_measurements)
+def test_p3_empty_rules_returns_empty(measurements):
+    """
+    **Validates: Requirement 8.1**
+
+    Property 3 — Empty rules → empty output:
+    For any zone_measurements dict, an empty rules list always returns [].
+    """
+    inp = RuleInput(
+        rules=[],
+        zone_measurements=measurements,
+        critical_zone_ids=[],
+    )
+    result = RuleEvaluator().evaluate(inp)
+    assert result == []
+
+
+# ===========================================================================
+# Module 6 — Property-Based Tests: Property 2 (Task 11.3)
+# ===========================================================================
+#
+# **Validates: Requirements 3.4, 3.5**
+#
+# Property 2: Verdict closure
+#   For any zone_measurements dict with floats ≥ 0.0 and any severity drawn
+#   from {"Incompatible", "Reserve"}, every RiskZoneDict returned by
+#   RuleEvaluator.evaluate() must have localized_verdict ∈
+#   {"Incompatible", "Reserve"}.  The engine must never produce an out-of-set
+#   verdict value regardless of how many rules fire or which severity is chosen.
+
+from hypothesis import given, settings, HealthCheck
+from hypothesis import strategies as st
+
+_VALID_VERDICTS = {"Incompatible", "Reserve"}
+
+# Strategy: dict with keys "bust", "waist", "hips" mapped to floats ≥ 0.0
+_zone_measurements_st = st.fixed_dictionaries(
+    {
+        "bust":  st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+        "waist": st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+        "hips":  st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+    }
+)
+
+_PBT2_SETTINGS = settings(
+    max_examples=200,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+    deadline=None,
+)
+
+
+@_PBT2_SETTINGS
+@given(
+    zone_measurements=_zone_measurements_st,
+    severity=st.sampled_from(["Incompatible", "Reserve"]),
+)
+def test_p2_verdict_values_constrained(zone_measurements, severity):
+    """
+    Property 2: Verdict closure — all localized_verdict values ∈
+    {"Incompatible", "Reserve"}.
+
+    Uses a rule with condition "value >= 0.0" so it always fires for any
+    measurement ≥ 0.0, guaranteeing the output list is non-empty and that
+    every produced RiskZoneDict is subject to the closure check.
+
+    **Validates: Requirements 3.4, 3.5**
+    """
+    # Build one always-firing rule per zone so the output is never empty.
+    rules = [
+        _make_rule(
+            zone_name=zone_name,
+            condition="value >= 0.0",
+            severity=severity,
+            explanation="Test règle toujours active.",
+        )
+        for zone_name in zone_measurements
+    ]
+
+    inp = _make_input(rules=rules, measurements=zone_measurements)
+    result = RuleEvaluator().evaluate(inp)
+
+    # The condition always fires for values ≥ 0.0, so at least one zone must
+    # have produced a RiskZoneDict (as long as measurements are ≥ 0.0).
+    assert len(result) > 0, (
+        f"Expected at least one RiskZoneDict for measurements {zone_measurements}, "
+        f"but got an empty list."
+    )
+
+    for rz in result:
+        assert rz.localized_verdict in _VALID_VERDICTS, (
+            f"localized_verdict {rz.localized_verdict!r} is outside the allowed set "
+            f"{_VALID_VERDICTS}. Rule severity was {severity!r}."
+        )
+
+
+# ===========================================================================
+# Module 6 — Property-Based Tests for RuleEvaluator
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Shared Hypothesis settings for Module 6 PBT
+# ---------------------------------------------------------------------------
+
+M6_PBT_SETTINGS = settings(
+    max_examples=200,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+    deadline=None,
+)
+
+# Strategy: zone_measurements dict with keys "bust", "waist", "hips" → floats ≥ 0.0
+zone_measurements_st = st.fixed_dictionaries({
+    "bust":  st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+    "waist": st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+    "hips":  st.floats(min_value=0.0, max_value=300.0, allow_nan=False, allow_infinity=False),
+})
+
+
+# ---------------------------------------------------------------------------
+# Property 4: Explanation completeness                    Validates: Req 6.3
+#
+# Every RiskZoneDict produced for a fired rule has a non-empty explanation,
+# even when explanation_message is None (fallback mechanism must kick in).
+# ---------------------------------------------------------------------------
+
+@M6_PBT_SETTINGS
+@given(zone_measurements=zone_measurements_st)
+def test_p4_explanation_never_empty_on_fired_rule(zone_measurements):
+    """
+    **Validates: Requirements 6.3**
+
+    Property 4 — Explanation completeness:
+    For any zone_measurements dict with non-negative floats, a RuleRecord whose
+    explanation_message is None and whose condition always fires (value >= 0.0)
+    must produce a RiskZoneDict with a non-empty (after strip) explanation.
+
+    This verifies the fallback explanation mechanism (Req 6.3): when
+    explanation_message is null/empty, RuleEvaluator builds a non-empty default.
+    """
+    # Build a rule that always fires (value >= 0.0 is true for all non-negative floats)
+    # and has no explanation_message — forcing the fallback path.
+    rule = RuleRecord(
+        rule_id=_uuid.uuid4(),
+        zone_id=_uuid.uuid4(),
+        zone_name="bust",
+        mathematical_condition="value >= 0.0",
+        severity_level="Reserve",
+        explanation_message=None,
+        version=1,
+    )
+
+    inp = RuleInput(
+        rules=[rule],
+        zone_measurements=zone_measurements,
+        critical_zone_ids=[],
+    )
+
+    result = RuleEvaluator().evaluate(inp)
+
+    # The rule must have fired (bust is always present and >= 0.0)
+    assert len(result) == 1, (
+        f"Expected exactly 1 RiskZoneDict (rule always fires), got {len(result)} "
+        f"for zone_measurements={zone_measurements}"
+    )
+
+    # Core property: explanation must be non-empty after stripping whitespace
+    rz = result[0]
+    assert len(rz.explanation.strip()) > 0, (
+        f"explanation is empty or whitespace-only for rule with "
+        f"explanation_message=None; zone_measurements={zone_measurements}"
+    )
+
+
+# ===========================================================================
+# Property 8: Malformed condition safety (Requirement 8.4)
+#
+# **Validates: Requirement 8.4**
+#
+# Arbitrary condition strings of length 1–200 must never cause an unhandled
+# exception from RuleEvaluator.evaluate(). The result may be an empty list
+# (malformed condition skipped) or a non-empty list (condition happened to be
+# syntactically valid and fired) — the only requirement is: no exception.
+# ===========================================================================
+
+
+@M6_PBT_SETTINGS
+@given(
+    zone_measurements=zone_measurements_st,
+    condition=st.text(min_size=1, max_size=200),
+)
+def test_p5_malformed_condition_never_raises(
+    zone_measurements: dict,
+    condition: str,
+) -> None:
+    """
+    **Validates: Requirement 8.4**
+
+    Property 8 — Malformed condition safety:
+    For any dict of zone_measurements and any arbitrary string 'condition'
+    of length 1–200, calling RuleEvaluator().evaluate() must NEVER raise
+    an exception.
+
+    The result is allowed to be:
+      - [] — the condition was malformed and was silently skipped, or it
+             evaluated to False (did not fire).
+      - [RiskZoneDict(...)] — the condition happened to be a syntactically
+             valid expression that evaluated to True.
+
+    The invariant is purely: no unhandled exception propagates out of
+    evaluate() regardless of the condition string content.
+    """
+    _evaluator = RuleEvaluator()
+
+    rule = RuleRecord(
+        rule_id=_uuid_pbt.uuid4(),
+        zone_id=_uuid_pbt.uuid4(),
+        zone_name="bust",
+        mathematical_condition=condition,
+        severity_level="Reserve",
+        explanation_message="Test propriété 8 — condition arbitraire.",
+        version=1,
+    )
+
+    inp = RuleInput(
+        rules=[rule],
+        zone_measurements=zone_measurements,
+        critical_zone_ids=[],
+    )
+
+    # The call must complete without raising any exception.
+    try:
+        result = _evaluator.evaluate(inp)
+    except Exception as exc:  # noqa: BLE001
+        raise AssertionError(
+            f"RuleEvaluator.evaluate() raised {type(exc).__name__} for "
+            f"condition={condition!r}: {exc}"
+        ) from exc
+
+    # Result must be a list (never None)
+    assert isinstance(result, list), (
+        f"evaluate() must return a list, got {type(result).__name__!r}"
+    )
+
+    # Each item in the result — if any — must be a valid RiskZoneDict
+    for rz in result:
+        assert isinstance(rz, RiskZoneDict)
+        assert rz.localized_verdict in ("Incompatible", "Reserve"), (
+            f"localized_verdict must be 'Incompatible' or 'Reserve', "
+            f"got {rz.localized_verdict!r}"
+        )

@@ -256,32 +256,32 @@ never overwritten**.
       `rule_version` copied to output
     - _Requirements: 3.1–3.9, 6.3, 8.1–8.5_
 
-  - [ ]* 11.2 Write property-based tests for `RuleEvaluator` (Property 1)
+  - [x] 11.2 Write property-based tests for `RuleEvaluator` (Property 1)
     - **Property 1: Determinism** — same inputs → identical `RiskZoneDict` lists
     - Implement `test_p1_determinism` using Hypothesis `@given(zone_measurements,
       severity)` strategy; call `evaluate()` twice, assert `result_1 == result_2`
     - **Validates: Requirements 3.9, 8.3**
 
-  - [ ]* 11.3 Write property-based tests for `RuleEvaluator` (Property 2)
+  - [x] 11.3 Write property-based tests for `RuleEvaluator` (Property 2)
     - **Property 2: Verdict closure** — all `localized_verdict` values ∈
       `{"Incompatible", "Reserve"}`
     - Implement `test_p2_verdict_values_constrained` using `@given(zone_measurements)`
     - **Validates: Requirements 3.4, 3.5**
 
-  - [ ]* 11.4 Write property-based tests for `RuleEvaluator` (Property 3)
+  - [x] 11.4 Write property-based tests for `RuleEvaluator` (Property 3)
     - **Property 3: Empty rules → empty output** — for any `zone_measurements`, an empty
       `rules` list always returns `[]`
     - Implement `test_p3_empty_rules_returns_empty` using `@given(zone_measurements)`
     - **Validates: Requirement 8.1**
 
-  - [ ]* 11.5 Write property-based tests for `RuleEvaluator` (Property 4)
+  - [x] 11.5 Write property-based tests for `RuleEvaluator` (Property 4)
     - **Property 4: Explanation completeness** — every `RiskZoneDict` in the result has
       `len(rz.explanation.strip()) > 0`
     - Implement `test_p4_explanation_never_empty_on_fired_rule` with a rule whose
       `explanation_message=None` and condition always fires (`value >= 0.0`)
     - **Validates: Requirement 6.3**
 
-  - [ ]* 11.6 Write property-based tests for `RuleEvaluator` (Property 8)
+  - [x] 11.6 Write property-based tests for `RuleEvaluator` (Property 8)
     - **Property 8: Malformed condition safety** — arbitrary `condition` strings of
       length 1–200 never cause an unhandled exception from `evaluate()`
     - Implement `test_p5_malformed_condition_never_raises` using
@@ -289,7 +289,7 @@ never overwritten**.
     - **Validates: Requirement 8.4**
 
 
-- [ ] 12. Write `CompatibilityService` integration tests in `test_service.py`
+- [x] 12. Write `CompatibilityService` integration tests in `test_service.py`
   - [x] 12.1 Add happy-path and verdict-variant integration tests
     - Append Module 6 integration tests to
       `backend/app/modules/business_rules/tests/test_service.py`; do not modify
@@ -304,14 +304,14 @@ never overwritten**.
       successful evaluation
     - _Requirements: 3.1–3.7, 4.1–4.4, 5.1–5.6, 7.1–7.3, 11.1–11.4, 12.1–12.4_
 
-  - [ ]* 12.2 Write integration test for single-transaction rollback (Property 6)
+  - [x] 12.2 Write integration test for single-transaction rollback (Property 6)
     - **Property 6: No partial persistence** — if the `INSERT risk_zones` fails
       mid-transaction, the parent `VerdictEvaluation` row is also rolled back
     - Mock `db.flush()` to raise `IntegrityError` after the first flush; assert the
       `verdict_evaluations` table is empty after the error
     - **Validates: Requirement 7.7**
 
-  - [ ]* 12.3 Write integration test for rule immutability (Property 7)
+  - [x] 12.3 Write integration test for rule immutability (Property 7)
     - **Property 7: Immutability of past evaluations** — updating a
       `CompatibilityRule` does NOT modify an already-persisted `VerdictEvaluation`
       or its `RiskZone` rows; `rule_version` in `RiskZone` reflects the version at
@@ -321,7 +321,7 @@ never overwritten**.
       original `RiskZone` and assert `rule_version == 1`
     - **Validates: Requirements 7.4, 7.2, 2.6**
 
-  - [ ]* 12.4 Write integration tests for admin-API CRUD on `CompatibilityRule`
+  - [x] 12.4 Write integration tests for admin-API CRUD on `CompatibilityRule`
     - Test `create_rule()` returns HTTP 201 with new `rule_id` and `version=1`
     - Test duplicate `(cut_type, fabric_property, zone_id)` active rule raises HTTP 409
     - Test `update_rule()` increments `version` and rejects immutable field changes
