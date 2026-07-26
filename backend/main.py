@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.modules.auth_user_profile.router import router as auth_user_profile_router
+from app.modules.measurements.router import router as measurements_router
+from app.modules.business_rules.router import router as ease_router, compatibility_router
 from app.modules.auth_catalogues.router import router as auth_catalogues_router
 from app.modules.measurements.router import router as measurements_router
 from app.modules.business_rules.router import router as business_rules_router
@@ -74,3 +76,15 @@ app.include_router(auth_catalogues_router, prefix="/api/v1")
 app.include_router(measurements_router, prefix="/api/v1/measurements", tags=["measurements"])
 app.include_router(business_rules_router, prefix="/api/v1/ease", tags=["ease-allowance"])
 app.include_router(report_router, prefix="/api/v1")  # Module 7 — reports
+app.include_router(ease_router, prefix="/api/v1/ease", tags=["ease-allowance"])
+
+# Module 3 (Fabric Catalog) + Module 4 (Pattern Catalog) router
+# Module 4 endpoints are mounted at /api/v1/models (within the router itself)
+# Module 3 fabric/category endpoints are also served through this router
+app.include_router(auth_catalogues_router, prefix="/api/v1", tags=["models"])
+
+# Module 6 — Compatibility Engine
+app.include_router(compatibility_router, prefix="/api/v1/compatibility", tags=["compatibility"])
+
+# Module 6 — Compatibility Engine
+app.include_router(compatibility_router, prefix="/api/v1/compatibility", tags=["compatibility"])
