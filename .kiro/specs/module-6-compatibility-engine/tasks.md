@@ -219,7 +219,7 @@ never overwritten**.
     - _Requirements: 10.1, 13.5_
 
 
-- [ ] 9. Checkpoint — Ensure all existing Module 5 tests still pass
+- [-] 9. Checkpoint — Ensure all existing Module 5 tests still pass
   - Run `pytest backend/app/modules/business_rules/tests/test_engine.py
     backend/app/modules/business_rules/tests/test_service.py -x` and verify zero
     regressions before proceeding to Module 6 tests
@@ -289,8 +289,8 @@ never overwritten**.
     - **Validates: Requirement 8.4**
 
 
-- [ ] 12. Write `CompatibilityService` integration tests in `test_service.py`
-  - [ ] 12.1 Add happy-path and verdict-variant integration tests
+- [x] 12. Write `CompatibilityService` integration tests in `test_service.py`
+  - [x] 12.1 Add happy-path and verdict-variant integration tests
     - Append Module 6 integration tests to
       `backend/app/modules/business_rules/tests/test_service.py`; do not modify
       existing Module 5 tests
@@ -330,7 +330,7 @@ never overwritten**.
     - Test non-admin `require_admin` raises HTTP 403 and leaks no rule content
     - _Requirements: 9.1–9.7_
 
-- [ ] 13. Checkpoint — Ensure all Module 5 and Module 6 tests pass
+- [~] 13. Checkpoint — Ensure all Module 5 and Module 6 tests pass
   - Run `pytest backend/app/modules/business_rules/tests/ -x` and confirm zero failures
     before marking the implementation complete; ask the user if any questions arise
 

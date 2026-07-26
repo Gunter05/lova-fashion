@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.business_rules.dependencies import (
     get_current_user,
     get_db,
+    require_admin,
 )
 from app.modules.business_rules.schemas import (
     AdjustmentListResponse,
@@ -30,8 +31,13 @@ from app.modules.business_rules.schemas import (
     AdjustmentResponse,
     AdjustmentSummary,
     ZoneDetail,
+    CompatibilityRuleCreate,
+    CompatibilityRuleResponse,
+    CompatibilityRuleUpdate,
+    VerdictEvaluationResponse,
+    VerificationRequest,
 )
-from app.modules.business_rules.service import EaseCalculationService
+from app.modules.business_rules.service import EaseCalculationService, CompatibilityService
 
 router = APIRouter()
 
@@ -203,3 +209,152 @@ def _build_adjustment_response(detail: dict) -> AdjustmentResponse:
         calculated_at=adj.calculated_at,
         data_integrity_warning=detail.get("data_integrity_warning", False),
     )
+
+
+# ---------------------------------------------------------------------------
+# Module 6 — Fabric / Model / Silhouette Compatibility Engine
+# Mounted at /api/v1/compatibility (registered in main.py).
+# Requirements: 9.1–9.7, 10.1–10.6, 13.1, 13.6
+# ---------------------------------------------------------------------------
+
+compatibility_router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# POST /verifications
+# Trigger a full compatibility evaluation  (Req 10.1–10.3)
+# ---------------------------------------------------------------------------
+
+@compatibility_router.post(
+    "/verifications",
+    response_model=VerdictEvaluationResponse,
+    status_code=201,
+    summary="Lancer une évaluation de compatibilité",
+    description=(
+        "Déclenche l'évaluation complète (tissu × patron × morphologie) pour une "
+        "combinaison donnée. Retourne HTTP 201 avec le verdict global et la liste des "
+        "zones à risque éventuelles."
+    ),
+)
+async def create_verification(
+    body: VerificationRequest,
+    current_user: uuid.UUID = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> VerdictEvaluationResponse:
+    """
+    Req 10.1 — authenticated user triggers evaluation.
+    Req 10.2 — 201 response with VerdictEvaluationResponse body.
+    Req 10.3 — evaluation persisted; retrievable via GET /verifications/{id}.
+    """
+    return await CompatibilityService.verify(body, current_user, db)
+
+
+# ---------------------------------------------------------------------------
+# GET /verifications/{evaluation_id}
+# Retrieve an existing evaluation  (Req 10.4–10.5)
+# ---------------------------------------------------------------------------
+
+@compatibility_router.get(
+    "/verifications/{evaluation_id}",
+    response_model=VerdictEvaluationResponse,
+    status_code=200,
+    summary="Consulter une évaluation de compatibilité",
+    description=(
+        "Retourne le verdict et les zones à risque d'une évaluation déjà persistée. "
+        "HTTP 404 si l'identifiant est inconnu."
+    ),
+)
+async def get_verification(
+    evaluation_id: uuid.UUID,
+    current_user: uuid.UUID = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> VerdictEvaluationResponse:
+    """
+    Req 10.4 — returns persisted evaluation with risk zones.
+    Req 10.5 — 404 if evaluation_id not found.
+    """
+    return await CompatibilityService.get_evaluation(evaluation_id, db)
+
+
+# ---------------------------------------------------------------------------
+# POST /compatibility-rules
+# Create a new compatibility rule (admin only)  (Req 9.1–9.3)
+# ---------------------------------------------------------------------------
+
+@compatibility_router.post(
+    "/compatibility-rules",
+    response_model=CompatibilityRuleResponse,
+    status_code=201,
+    summary="Créer une règle de compatibilité",
+    description=(
+        "Crée une nouvelle règle de compatibilité (cut_type × fabric_property × zone). "
+        "Réservé aux administrateurs. HTTP 409 si une règle active identique existe déjà."
+    ),
+)
+async def create_compatibility_rule(
+    body: CompatibilityRuleCreate,
+    admin_id: uuid.UUID = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CompatibilityRuleResponse:
+    """
+    Req 9.1 — admin creates rule with version=1.
+    Req 9.2 — 409 on duplicate active (cut_type, fabric_property, zone_id).
+    Req 9.5 — require_admin enforces is_admin JWT claim; 403 leaks no rule content.
+    """
+    return await CompatibilityService.create_rule(body, admin_id, db)
+
+
+# ---------------------------------------------------------------------------
+# PATCH /compatibility-rules/{rule_id}
+# Update a compatibility rule (admin only)  (Req 9.3–9.4)
+# ---------------------------------------------------------------------------
+
+@compatibility_router.patch(
+    "/compatibility-rules/{rule_id}",
+    response_model=CompatibilityRuleResponse,
+    status_code=200,
+    summary="Modifier une règle de compatibilité",
+    description=(
+        "Met à jour les champs mutables d'une règle existante et incrémente sa version. "
+        "Les champs d'identité (cut_type, fabric_property, zone_id) sont immuables : "
+        "toute tentative de les modifier est rejetée avec HTTP 422."
+    ),
+)
+async def update_compatibility_rule(
+    rule_id: uuid.UUID,
+    body: CompatibilityRuleUpdate,
+    admin_id: uuid.UUID = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> CompatibilityRuleResponse:
+    """
+    Req 9.3 — version incremented on every PATCH.
+    Req 9.4 — immutable identity fields rejected with 422 (enforced in service).
+    Req 9.5 — require_admin enforces is_admin JWT claim.
+    """
+    return await CompatibilityService.update_rule(rule_id, body, db)
+
+
+# ---------------------------------------------------------------------------
+# GET /compatibility-rules
+# List all compatibility rules (admin only)  (Req 9.6–9.7)
+# ---------------------------------------------------------------------------
+
+@compatibility_router.get(
+    "/compatibility-rules",
+    response_model=list[CompatibilityRuleResponse],
+    status_code=200,
+    summary="Lister les règles de compatibilité",
+    description=(
+        "Retourne toutes les règles de compatibilité (actives et inactives), "
+        "limitées à 200 entrées. Réservé aux administrateurs."
+    ),
+)
+async def list_compatibility_rules(
+    admin_id: uuid.UUID = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[CompatibilityRuleResponse]:
+    """
+    Req 9.6 — returns all rules (active + inactive) up to limit=200.
+    Req 9.7 — admin-only access via require_admin.
+    """
+    return await CompatibilityService.list_rules(db)

@@ -130,3 +130,68 @@ async def get_adjustment_or_404(
         )
 
     return adjustment
+
+
+# ---------------------------------------------------------------------------
+# T-07.1 — require_admin: decode JWT → check is_admin claim → return user_id
+# ---------------------------------------------------------------------------
+
+async def require_admin(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+) -> uuid.UUID:
+    """
+    Decode a Supabase Bearer JWT, verify the ``is_admin`` claim, and return
+    the caller's user_id UUID.
+
+    The ``is_admin`` claim must be present and truthy in the JWT payload.
+    If the claim is absent or ``false``, the request is rejected with HTTP 403.
+    The 403 response body intentionally contains no rule content (no ``rule_id``,
+    ``mathematical_condition``, ``severity_level``, or ``explanation_message``).
+
+    Raises
+    ------
+    HTTPException 500 — SUPABASE_JWT_SECRET not configured.
+    HTTPException 401 — token missing, malformed, expired, or invalid signature.
+    HTTPException 403 — ``is_admin`` claim is absent or false.
+
+    Returns
+    -------
+    uuid.UUID — the authenticated admin's user_id.
+
+    Implements: Requirements 9.5, 13.1
+    """
+    if not _JWT_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "SUPABASE_JWT_SECRET n'est pas configuré. "
+                "Contactez l'administrateur."
+            ),
+        )
+
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            _JWT_SECRET,
+            algorithms=[_JWT_ALGORITHM],
+            options={"verify_aud": False},
+        )
+        sub: str | None = payload.get("sub")
+        if sub is None:
+            raise JWTError("Claim 'sub' absent du token.")
+        user_id = uuid.UUID(sub)
+
+    except (JWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token d'authentification invalide ou expiré.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not payload.get("is_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    return user_id
