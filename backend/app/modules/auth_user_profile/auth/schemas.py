@@ -12,6 +12,8 @@ class UserRole(str, Enum):
     ADMIN = "Admin"
 
 
+
+
 CNI_REGEX = re.compile(r'^[A-Za-z0-9]{9}$')
 
 

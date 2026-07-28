@@ -42,7 +42,12 @@ class UserModel(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     mot_de_passe: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        SAEnum(UserRole, name="user_role", create_constraint=True),
+        SAEnum( 
+            UserRole, 
+            name="user_role", 
+            values_callable=lambda x: [e.value for e in x],
+            create_constraint=True
+        ),
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

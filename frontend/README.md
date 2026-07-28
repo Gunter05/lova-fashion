@@ -1,18 +1,16 @@
-# Frontend — decision pending
+# React + Vite
 
-The team needs to choose between React (Vercel) and Flutter before scaffolding.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-| Criteria | React (Vercel) | Flutter |
-|---|---|---|
-| Demo for judges | Direct web link, zero friction | APK to install, or a video needed |
-| Camera access (front/side photos) | OK via browser (getUserMedia) | Native, smoother |
-| Team experience | Already used on the previous hackathon | Used on Geya |
-| Deployment | Vercel, zero-config | Less direct for web |
+Currently, two official plugins are available:
 
-Once decided:
-- **React**: `npx create-vite@latest . -- --template react`, add Tailwind, update
-  `.kiro/steering/tech.md`.
-- **Flutter**: `flutter create .`, update `.kiro/steering/tech.md`.
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-Either way, write the spec in `.kiro/specs/frontend-ui/` first, before having Kiro generate
-the screens.
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.

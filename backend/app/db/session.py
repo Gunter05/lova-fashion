@@ -11,6 +11,9 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from dotenv import load_dotenv
+
+load_dotenv()  # Charge les variables du fichier .env dans os.environ
 
 # ---------------------------------------------------------------------------
 # URL resolution
