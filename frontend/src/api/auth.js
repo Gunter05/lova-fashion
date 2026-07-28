@@ -7,7 +7,7 @@ import client from './client';
  * @returns {Promise} Axios response
  */
 export const login = (email, mot_de_passe) =>
-  client.post('/api/auth/login', { email, mot_de_passe });
+  client.post('/api/v1/auth/login', { email, mot_de_passe });
 
 /**
  * Register a new user account.
@@ -15,4 +15,4 @@ export const login = (email, mot_de_passe) =>
  * @returns {Promise} Axios response
  */
 export const register = (data) =>
-  client.post('/api/auth/register', data);
+  client.post('/api/v1/auth/register', data);
