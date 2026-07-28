@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.modules.auth_user_profile.router import router as auth_user_profile_router
 from app.modules.measurements.router import router as measurements_router
@@ -55,6 +56,30 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Remote Custom-Fit Styling — AWS re:Deploy 2026",
     lifespan=lifespan,
+)
+
+# ---------------------------------------------------------------------------
+# CORS — allow requests from local dev and Vercel deployments
+# ---------------------------------------------------------------------------
+import os
+
+_EXTRA_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",        # Vite dev server
+        "http://localhost:3000",        # fallback local port
+        "https://lova-fashion.vercel.app",  # production Vercel domain
+        *_EXTRA_ORIGINS,               # extra origins via env var
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
