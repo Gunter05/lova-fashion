@@ -16,10 +16,12 @@ Req 5 · Req 6 · Req 7
 """
 from __future__ import annotations
 
+import os
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -33,31 +35,49 @@ from app.modules.business_rules.report_service import ReportService, build_displ
 router = APIRouter(prefix="/reports", tags=["reports"])
 _service = ReportService()
 
+_bearer_scheme = HTTPBearer(auto_error=True)
 
-# ── Auth helpers (reads from x-user-cni / x-user-role headers set by Module 1) ──────
+_JWT_SECRET: str = os.environ.get("JWT_SECRET", "dev-secret-change-me-32-chars-min!")
+_JWT_ALGORITHM: str = "HS256"
+_JWT_ISSUER: str = os.environ.get("JWT_ISSUER", "lova-fashion-auth")
 
-def _get_caller(
-    x_user_cni: Annotated[str | None, Header()] = None,
-    x_user_role: Annotated[str | None, Header()] = None,
+
+# ── Auth dependency — decodes Bearer JWT → (cni, role) ───────────────────────
+
+async def _get_caller(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
 ) -> tuple[str, str]:
     """
-    Extract caller identity from the headers populated by Module 1's JWT middleware.
+    Decode the Bearer JWT issued by Module 1 and return (cni, role).
 
-    Raises HTTP 401 if either header is absent or CNI is not 9 characters.
+    Raises HTTP 401 if the token is missing, expired, or has an invalid signature.
     NFR-02
     """
-    if not x_user_cni or not x_user_role:
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            _JWT_SECRET,
+            algorithms=[_JWT_ALGORITHM],
+            options={"verify_aud": False},
+        )
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication credentials are required.",
+            detail="Token d'authentification invalide ou expiré.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if len(x_user_cni) != 9:
+
+    cni: str | None = payload.get("cni")
+    role: str | None = payload.get("role")
+
+    if not cni or not role:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user identity in request headers.",
+            detail="Token incomplet : claims 'cni' ou 'role' manquants.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    return x_user_cni, x_user_role
+
+    return cni, role
 
 
 # ── GET /reports/me ──────────────────────────────────────────────────────────

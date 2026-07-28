@@ -34,7 +34,7 @@ export default function ReportPage() {
     if (!user?.cni) return;
     (async () => {
       try {
-        const res = await listMyReports(user.cni, user.role);
+        const res = await listMyReports();
         setReports(res.data.reports || []);
       } catch (err) {
         if (err?.response?.status === 403) {
@@ -52,7 +52,7 @@ export default function ReportPage() {
     setSelected(null);
     setDetLoading(true);
     try {
-      const res = await getReport(summary.report_id, user.cni, user.role);
+      const res = await getReport(summary.report_id);
       setSelected(res.data);
     } catch {
       setError('Impossible de charger le rapport.');

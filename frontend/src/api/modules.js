@@ -45,6 +45,31 @@ export const computeAdjustment    = (session_id, fabric_id) => client.post('/api
 export const getAdjustment        = (id)                    => client.get(`/api/ease/adjustments/${id}`);
 export const listAdjustments      = (session_id)            => client.get(`/api/ease/sessions/${session_id}/adjustments`);
 
+// ── Module 6: Compatibility Engine ───────────────────────────────────────────
+
+/**
+ * Trigger a full compatibility evaluation (fabric × pattern × body shape).
+ * @param {string} session_id   - UUID of the measurement session
+ * @param {string} fabric_id    - UUID of the chosen fabric
+ * @param {string} model_id     - UUID of the chosen garment pattern
+ * @returns {Promise} 201 VerdictEvaluationResponse
+ */
+export const createVerification = (session_id, fabric_id, model_id) =>
+  client.post('/api/compatibility/verifications', { session_id, fabric_id, model_id });
+
+/**
+ * Retrieve an existing compatibility evaluation.
+ * @param {string} id - UUID of the evaluation
+ * @returns {Promise} 200 VerdictEvaluationResponse
+ */
+export const getVerification = (id) =>
+  client.get(`/api/compatibility/verifications/${id}`);
+
+// Admin-only — compatibility rules management
+export const listCompatibilityRules  = ()           => client.get('/api/compatibility/compatibility-rules');
+export const createCompatibilityRule = (data)       => client.post('/api/compatibility/compatibility-rules', data);
+export const updateCompatibilityRule = (id, data)   => client.patch(`/api/compatibility/compatibility-rules/${id}`, data);
+
 // ── Module 7: Reports ─────────────────────────────────────────────────────────
-export const listMyReports  = (cni, role) => client.get('/api/reports/me', { headers: { 'x-user-cni': cni, 'x-user-role': role } });
-export const getReport      = (id, cni, role) => client.get(`/api/reports/${id}`, { headers: { 'x-user-cni': cni, 'x-user-role': role } });
+export const listMyReports  = ()    => client.get('/api/reports/me');
+export const getReport      = (id)  => client.get(`/api/reports/${id}`);

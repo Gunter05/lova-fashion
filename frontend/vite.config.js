@@ -52,6 +52,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/ease/, '/api/v1/ease'),
       },
+      // Compatibility engine: /api/compatibility/* → /api/v1/compatibility/*
+      '/api/compatibility': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/compatibility/, '/api/v1/compatibility'),
+      },
       // Reports: /api/reports/* → /api/v1/reports/*
       '/api/reports': {
         target: 'http://127.0.0.1:8000',
