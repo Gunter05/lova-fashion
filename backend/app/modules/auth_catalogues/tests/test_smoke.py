@@ -100,9 +100,11 @@ def _seed_zones(db_session) -> list[str]:
 
 def _count_snapshots(db_session, model_id: str) -> int:
     """Return the number of ModelSnapshot rows for the given model_id."""
+    import uuid
+    m_id = uuid.UUID(model_id) if isinstance(model_id, str) else model_id
     async def _query():
         result = await db_session.execute(
-            select(ModelSnapshot).where(ModelSnapshot.model_id == model_id)
+            select(ModelSnapshot).where(ModelSnapshot.model_id == m_id)
         )
         return len(result.scalars().all())
 

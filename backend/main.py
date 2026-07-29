@@ -59,6 +59,45 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
+# Global Robust Exception Handlers
+# ---------------------------------------------------------------------------
+from fastapi import Request, status
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+import logging
+
+_api_logger = logging.getLogger("lova_fashion_api")
+
+from fastapi.encoders import jsonable_encoder
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    _api_logger.error(f"Erreur de validation de la requête : {exc.errors()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": "Erreur de validation des données fournies.", "errors": jsonable_encoder(exc.errors())},
+    )
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    _api_logger.warning(f"HTTP Exception: {exc.status_code} - {exc.detail}")
+    headers = getattr(exc, "headers", None)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=headers,
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    _api_logger.exception("Une erreur non gérée est survenue lors du traitement de la requête :")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Une erreur serveur interne est survenue. Veuillez réessayer plus tard."},
+    )
+
+# ---------------------------------------------------------------------------
 # CORS — allow requests from local dev and Vercel deployments
 # ---------------------------------------------------------------------------
 import os
@@ -96,6 +135,7 @@ def health():
 
 # Module 1 — Auth & User Profile
 app.include_router(auth_user_profile_router, prefix="/api/v1")
+app.include_router(auth_user_profile_router, prefix="/auth-catalogues")
 
 # Module 2 — Measurement Sessions
 app.include_router(measurements_router, prefix="/api/v1/measurements", tags=["measurements"])
