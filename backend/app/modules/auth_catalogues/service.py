@@ -40,7 +40,9 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth_catalogues import crud
+from app.modules.auth_catalogues import crud, ai_client, storage
+from app.modules.auth_catalogues.ai_client import AILowConfidenceError, AIUnavailableError
+from app.modules.auth_catalogues.storage import StorageUploadError
 from app.modules.auth_catalogues.models import CriticalZone, Fabric, Model
 from app.modules.auth_catalogues.schemas import (
     FabricItem,
@@ -403,10 +405,6 @@ async def init_model(
 
     Implements: Req 1 AC1–8; design §5.
     """
-    from app.modules.auth_catalogues import ai_client, storage
-    from app.modules.auth_catalogues.ai_client import AILowConfidenceError, AIUnavailableError
-    from app.modules.auth_catalogues.storage import StorageUploadError
-
     # ── Step 1: Validate image format ────────────────────────────────────────
     # Check MIME type
     if content_type.lower() not in _ALLOWED_CONTENT_TYPES:

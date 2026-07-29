@@ -17,13 +17,17 @@ All models inherit from the shared `Base` declared in `app.database`.
 
 import enum
 import uuid
-from sqlalchemy import Column, String, Numeric, Text, ForeignKey, TIMESTAMP, func, Integer, Table
+from sqlalchemy import Column, String, Numeric, Text, ForeignKey, TIMESTAMP, func, Integer, Table, UUID
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.types import JSON
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.compiler import compiles
 
 from app.db.session import Base
+
+@compiles(UUID, "sqlite")
+def compile_uuid_sqlite(element, compiler, **kw):
+    return "VARCHAR(36)"
 
 
 class FabricCategory(Base):

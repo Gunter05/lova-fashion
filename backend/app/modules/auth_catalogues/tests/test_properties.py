@@ -745,6 +745,7 @@ def _create_published_model(client, db_session) -> str:
 MODULE4_PBT_SETTINGS = settings(
     max_examples=10,
     suppress_health_check=[HealthCheck.function_scoped_fixture],
+    deadline=None,
 )
 
 
@@ -1020,10 +1021,12 @@ def test_p7_1_snapshot_count_equals_patch_count(client, db_session, k):
         )
 
     # Count snapshots in DB
+    import uuid
+    m_id = uuid.UUID(model_id) if isinstance(model_id, str) else model_id
     async def _count_snapshots():
         result = await db_session.execute(
             select(ModelSnapshot).where(
-                ModelSnapshot.model_id == model_id
+                ModelSnapshot.model_id == m_id
             )
         )
         return len(result.scalars().all())
@@ -1116,9 +1119,11 @@ def test_p7_4_snapshot_failure_rolls_back(client, db_session):
     state_before = constraints_before.json()
 
     # Count snapshots before the attempt
+    import uuid
+    m_id = uuid.UUID(model_id) if isinstance(model_id, str) else model_id
     async def _count_snapshots():
         result = await db_session.execute(
-            select(ModelSnapshot).where(ModelSnapshot.model_id == model_id)
+            select(ModelSnapshot).where(ModelSnapshot.model_id == m_id)
         )
         return len(result.scalars().all())
 

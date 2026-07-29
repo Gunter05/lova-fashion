@@ -87,7 +87,7 @@ async def _setup_schema(engine) -> None:
         """))
         await conn.execute(text("""
             INSERT OR IGNORE INTO users (cni, nom, email, mot_de_passe, role)
-            VALUES (:cni, 'Handler Test User', 'handler@example.com', 'hashed', 'CLIENT')
+            VALUES (:cni, 'Handler Test User', 'handler@example.com', 'hashed', 'Client')
         """), {"cni": TEST_CNI})
 
 
@@ -353,7 +353,7 @@ class TestHandleProfileDataRequest:
                 await session.execute(
                     text("""
                         INSERT OR IGNORE INTO users (cni, nom, email, mot_de_passe, role)
-                        VALUES (:cni, 'NoMeas User', 'nomeas@example.com', 'h', 'CLIENT')
+                    VALUES (:cni, 'NoMeas User', 'nomeas@example.com', 'h', 'Client')
                     """),
                     {"cni": no_meas_cni},
                 )
