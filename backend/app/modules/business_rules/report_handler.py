@@ -67,9 +67,9 @@ def make_compatibility_evaluated_handler(session_factory):
                 await db.commit()
                 await db.refresh(report)
                 logger.info(
-                    "Module 7: RapportMesure created — id=%s cni=%s verdict=%s",
+                    "Module 7: RapportMesure created — id=%s user_id=%s verdict=%s",
                     report.id_report,
-                    event.cni,
+                    event.user_id,
                     event.verdict,
                 )
             except ReportCreationError as exc:
@@ -79,8 +79,8 @@ def make_compatibility_evaluated_handler(session_factory):
             except Exception as exc:
                 await db.rollback()
                 logger.error(
-                    "Module 7: unexpected error creating report for cni=%s — %s",
-                    event.cni,
+                    "Module 7: unexpected error creating report for user_id=%s — %s",
+                    event.user_id,
                     exc,
                     exc_info=True,
                 )
@@ -92,15 +92,15 @@ def make_compatibility_evaluated_handler(session_factory):
             from app.modules.auth_user_profile.events.bus import event_bus
 
             saved_event = ReportSavedEvent(
-                cni=event.cni,
+                user_id=event.user_id,
                 report_id=str(report.id_report),
                 date_generation=report.generated_at.astimezone(timezone.utc).isoformat(),
             )
             await event_bus.publish("report.saved", saved_event.model_dump())
             logger.info(
-                "Module 7: report.saved published — report_id=%s cni=%s",
+                "Module 7: report.saved published — report_id=%s user_id=%s",
                 saved_event.report_id,
-                saved_event.cni,
+                saved_event.user_id,
             )
         except Exception as exc:
             logger.warning(

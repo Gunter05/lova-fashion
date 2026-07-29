@@ -32,7 +32,8 @@ from app.db.session import AsyncSessionLocal as AsyncSessionFactory
 # Constants
 # ---------------------------------------------------------------------------
 
-_JWT_SECRET: str = os.environ.get("SUPABASE_JWT_SECRET", "")
+# Custom JWT flow uses JWT_SECRET
+_JWT_SECRET: str = os.environ.get("JWT_SECRET", "dev-secret-change-me-32-chars-min!")
 _JWT_ALGORITHM: str = "HS256"
 
 _bearer_scheme = HTTPBearer(auto_error=True)
@@ -72,15 +73,6 @@ async def get_current_user(
     HTTPException 401 — token missing, malformed, expired, or invalid signature.
     AC-01.1, NFR-02
     """
-    if not _JWT_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                "SUPABASE_JWT_SECRET n'est pas configuré. "
-                "Contactez l'administrateur."
-            ),
-        )
-
     try:
         payload = jwt.decode(
             credentials.credentials,
@@ -160,15 +152,6 @@ async def require_admin(
 
     Implements: Requirements 9.5, 13.1
     """
-    if not _JWT_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                "SUPABASE_JWT_SECRET n'est pas configuré. "
-                "Contactez l'administrateur."
-            ),
-        )
-
     try:
         payload = jwt.decode(
             credentials.credentials,

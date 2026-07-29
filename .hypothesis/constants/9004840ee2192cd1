@@ -1,4 +1,0 @@
-# file: C:\Users\Gunter_2\Desktop\work\lova-fashion\backend\app\modules\auth_catalogues\models.py
-# hypothesis_version: 6.158.1
-
-[100, 255, '1', 'Archived', 'Blouse', 'CASCADE', 'Coat', 'CriticalZone', 'Draft', 'Dress', 'Fabric', 'FabricCategory', 'Fitted', 'Jacket', 'Loose', 'Model', 'ModelFabric', 'ModelSnapshot', 'Published', 'Semi-fitted', 'Shirt', 'Shorts', 'Skirt', 'Suit', 'Traditional', 'Trousers', 'all, delete-orphan', 'available', 'category', 'critical_zone', 'cut_type_enum', 'fabric_associations', 'fabric_categories', 'fabrics', 'garment_type_enum', 'model', 'model.model_id', 'model_critical_zone', 'model_fabric', 'model_id', 'model_ref', 'model_snapshot', 'model_status_enum', 'models', 'selectin', 'snapshots', 'zone_id', 'zones']

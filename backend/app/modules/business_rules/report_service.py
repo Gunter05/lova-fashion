@@ -78,13 +78,13 @@ def build_display_hints(
 
 # ── Private guard helpers ─────────────────────────────────────────────────────
 
-async def _assert_user_exists(cni: str, db: AsyncSession) -> None:
-    """Raise ReportCreationError if no user with the given CNI exists. Req 4 AC3"""
+async def _assert_user_exists(user_id: uuid.UUID, db: AsyncSession) -> None:
+    """Raise ReportCreationError if no user with the given user_id exists."""
     from sqlalchemy import text
-    result = await db.execute(text("SELECT cni FROM users WHERE cni = :cni"), {"cni": cni})
+    result = await db.execute(text("SELECT id FROM users WHERE id = :user_id"), {"user_id": str(user_id)})
     if result.scalar_one_or_none() is None:
         raise ReportCreationError(
-            f"Module 7: cni={cni!r} not found in users table."
+            f"Module 7: user_id={user_id!r} not found in users table."
         )
 
 
@@ -217,7 +217,7 @@ async def _load_report_or_404(report_id: uuid.UUID, db: AsyncSession) -> Rapport
             incompatible = None
     return SimpleNamespace(
         id_report=uuid.UUID(row.id_report) if isinstance(row.id_report, str) else row.id_report,
-        cni=row.cni,
+        user_id=uuid.UUID(row.user_id) if isinstance(row.user_id, str) else row.user_id,
         adjustment_id=uuid.UUID(row.adjustment_id) if isinstance(row.adjustment_id, str) else row.adjustment_id,
         fabric_id=uuid.UUID(row.fabric_id) if isinstance(row.fabric_id, str) else row.fabric_id,
         model_id=uuid.UUID(row.model_id) if isinstance(row.model_id, str) else row.model_id,
@@ -229,19 +229,19 @@ async def _load_report_or_404(report_id: uuid.UUID, db: AsyncSession) -> Rapport
     )  # type: ignore[return-value]
 
 
-async def _query_reports_by_cni(
-    cni: str,
+async def _query_reports_by_user_id(
+    user_id: uuid.UUID,
     db: AsyncSession,
 ) -> list[RapportMesure]:
-    """SELECT all reports for a CNI ordered by generated_at DESC. Req 6 AC1"""
+    """SELECT all reports for a user_id ordered by generated_at DESC."""
     import json as _json
     from sqlalchemy import text as _text
     result = await db.execute(
         _text(
-            "SELECT * FROM rapport_mesure WHERE cni = :cni "
+            "SELECT * FROM rapport_mesure WHERE user_id = :user_id "
             "ORDER BY generated_at DESC"
         ),
-        {"cni": cni},
+        {"user_id": str(user_id)},
     )
     rows = result.fetchall()
     from types import SimpleNamespace
@@ -261,8 +261,8 @@ async def _query_reports_by_cni(
             gen_at = datetime.fromisoformat(gen_at)
         reports.append(SimpleNamespace(
             id_report=uuid.UUID(row.id_report) if isinstance(row.id_report, str) else row.id_report,
-            cni=row.cni,
-            adjustment_id=row.adjustment_id,
+            user_id=uuid.UUID(row.user_id) if isinstance(row.user_id, str) else row.user_id,
+            adjustment_id=uuid.UUID(row.adjustment_id) if isinstance(row.adjustment_id, str) else row.adjustment_id,
             fabric_id=uuid.UUID(row.fabric_id) if isinstance(row.fabric_id, str) else row.fabric_id,
             model_id=uuid.UUID(row.model_id) if isinstance(row.model_id, str) else row.model_id,
             verdict=row.verdict,
@@ -299,7 +299,7 @@ class ReportService:
         RapportMesure row, commit, and return the ORM object.
 
         Guards run in this order (fail-fast):
-          1. User (CNI) exists
+          1. User exists
           2. adjustment_id exists
           3. Adjusted measurements are non-negative
           4. fabric_id exists
@@ -310,8 +310,9 @@ class ReportService:
         Raises ReportCreationError on any guard failure (caller logs + discards).
         Req 1 AC1, AC4–5 · Req 2 · Req 3 AC4 · Req 4 AC1–3 · Req 8 AC2
         """
+        user_uuid = uuid.UUID(event.user_id) if isinstance(event.user_id, str) else event.user_id
         # Guard 1: user exists
-        await _assert_user_exists(event.cni, db)
+        await _assert_user_exists(user_uuid, db)
 
         # Guard 2: adjustment exists
         adjustment = await _load_adjustment_or_raise(event.adjustment_id, db)
@@ -344,16 +345,16 @@ class ReportService:
 
         await db.execute(_text("""
             INSERT INTO rapport_mesure
-                (id_report, cni, adjustment_id, fabric_id, model_id,
+                (id_report, user_id, adjustment_id, fabric_id, model_id,
                  verdict, adjusted_measurements, advice, incompatible_zones,
                  generated_at)
             VALUES
-                (:id_report, :cni, :adjustment_id, :fabric_id, :model_id,
+                (:id_report, :user_id, :adjustment_id, :fabric_id, :model_id,
                  :verdict, :adjusted_measurements, :advice, :incompatible_zones,
                  CURRENT_TIMESTAMP)
         """), {
             "id_report":             str(new_id),
-            "cni":                   event.cni,
+            "user_id":               str(user_uuid),
             "adjustment_id":         str(event.adjustment_id),
             "fabric_id":             str(event.fabric_id),
             "model_id":              str(event.model_id),
@@ -368,7 +369,7 @@ class ReportService:
         now = datetime.now(_tz.utc)
         return SimpleNamespace(
             id_report=new_id,
-            cni=event.cni,
+            user_id=user_uuid,
             adjustment_id=event.adjustment_id,
             fabric_id=event.fabric_id,
             model_id=event.model_id,
@@ -384,18 +385,18 @@ class ReportService:
     async def get_report(
         self,
         report_id: uuid.UUID,
-        caller_cni: str,
+        caller_id: str,
         caller_role: str,
         db: AsyncSession,
     ) -> RapportMesure:
         """
         Load a report by PK and enforce access control.
 
-        - Client: can only retrieve their own report (cni must match).
+        - Client: can only retrieve their own report (user_id must match).
         - Tailor / Admin: unrestricted access to any report.
 
         Raises HTTP 404 if not found, HTTP 403 if caller is a client
-        whose CNI does not match the report's CNI.
+        whose user_id does not match the report's user_id.
 
         Req 5 AC1–5
         """
@@ -403,7 +404,7 @@ class ReportService:
 
         # Clients may only access their own report
         if caller_role.lower() in ("client",):
-            if report.cni != caller_cni:
+            if str(report.user_id) != str(caller_id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="You do not have permission to access this report.",
@@ -415,34 +416,36 @@ class ReportService:
 
     async def list_reports_for_client(
         self,
-        cni: str,
+        user_id: str,
         db: AsyncSession,
     ) -> list[RapportMesure]:
         """
-        Return all reports for the given CNI, ordered newest first.
+        Return all reports for the given user_id, ordered newest first.
         Returns an empty list when no reports exist (Req 6 AC2).
         Req 6 AC1–2
         """
-        return await _query_reports_by_cni(cni, db)
+        user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+        return await _query_reports_by_user_id(user_uuid, db)
 
     async def list_reports_for_client_as_tailor(
         self,
-        target_cni: str,
+        target_user_id: str,
         db: AsyncSession,
     ) -> list[RapportMesure]:
         """
-        Return all reports for the target CNI (Tailor/Admin access).
+        Return all reports for the target user_id (Tailor/Admin access).
         Raises HTTP 404 if the target user does not exist.
         Req 7 AC1–4
         """
+        target_uuid = uuid.UUID(target_user_id) if isinstance(target_user_id, str) else target_user_id
         try:
-            await _assert_user_exists(target_cni, db)
+            await _assert_user_exists(target_uuid, db)
         except ReportCreationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(exc),
             )
-        return await _query_reports_by_cni(target_cni, db)
+        return await _query_reports_by_user_id(target_uuid, db)
 
     # ── Helper: build ReportSummary list ─────────────────────────────────────
 
