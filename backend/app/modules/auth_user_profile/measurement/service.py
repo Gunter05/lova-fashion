@@ -49,19 +49,23 @@ class MeasurementService:
 
     async def create_manual_mensuration(
         self,
-        user_id: str,
+        cni: str,
         data: MensurationCreateRequest,
     ) -> MensurationResponse:
         """
         Create a Mensuration record from a manually submitted request.
 
+        Note: Pydantic schema (MensurationCreateRequest) already validates that all
+        five values are > 0 and ≤ 300 cm — any violation returns HTTP 422 before
+        this method is ever called (Req 8.3, 8.4).
+
         Raises:
-            HTTP 404 USER_NOT_FOUND — if the user_id has no matching user.
-            HTTP 500 (re-raised)     — on unexpected system failure.
+            HTTP 404 USER_NOT_FOUND — if the CNI has no matching user.
+            HTTP 500 (re-raised)     — on unexpected system failure (logged CRITICAL, Req 8.5).
         """
         try:
             record = await self._repo.create_mensuration(
-                user_id=user_id,
+                cni=cni,
                 tour_poitrine=data.tour_poitrine,
                 tour_taille=data.tour_taille,
                 tour_hanches=data.tour_hanches,
@@ -73,20 +77,21 @@ class MeasurementService:
             raise _error(
                 status.HTTP_404_NOT_FOUND,
                 "USER_NOT_FOUND",
-                f"No user found with id '{user_id}'.",
+                f"No user found with CNI '{cni}'.",
             )
         except Exception:
+            # Req 8.5 — unexpected system failure: log CRITICAL and re-raise
             logger.critical(
-                "Unexpected failure while creating mensuration for user_id '%s'. "
+                "Unexpected failure while creating mensuration for CNI '%s'. "
                 "No partial record was persisted.",
-                user_id,
+                cni,
                 exc_info=True,
             )
             raise
 
         return MensurationResponse(
             id_mesure=record.id_mesure,
-            user_id=str(record.user_id),
+            cni=record.cni,
             tour_poitrine=float(record.tour_poitrine),
             tour_taille=float(record.tour_taille),
             tour_hanches=float(record.tour_hanches),
@@ -99,68 +104,67 @@ class MeasurementService:
 
     async def get_history(
         self,
-        user_id: str,
-        requester_id: str,
+        cni: str,
+        requester_cni: str,
         requester_role: str,
     ) -> list[MensurationResponse]:
         """
-        Return the Mensuration history for target ``user_id``, enforcing RBAC rules.
+        Return the Mensuration history for target ``cni``, enforcing RBAC rules.
 
         Access rules:
-          - Client  : can only access their own history (user_id == requester_id).
+          - Client  : can only access their own history (cni == requester_cni).
           - Tailor  : must be explicitly assigned to the target client.
-          - Admin   : unrestricted access.
+          - Admin   : unrestricted access to any user's history.
+
+        If the query returns an empty list AND the target user does not exist,
+        HTTP 404 is raised (Req 10, also guards GET /users/{cni}/mensurations).
 
         Raises:
-            HTTP 403 FORBIDDEN           — Client requesting another user's history.
-            HTTP 403 TAILOR_NOT_ASSIGNED — Tailor not assigned to the target client.
-            HTTP 404 USER_NOT_FOUND      — Target user_id does not exist.
+            HTTP 403 FORBIDDEN             — Client requesting another user's history.
+            HTTP 403 TAILOR_NOT_ASSIGNED   — Tailor not assigned to the target client.
+            HTTP 404 USER_NOT_FOUND        — Target CNI does not exist.
         """
-        import uuid as _uuid
-        try:
-            target_uuid = _uuid.UUID(user_id)
-            requester_uuid = _uuid.UUID(requester_id)
-        except ValueError:
-            raise _error(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND",
-                         f"No user found with id '{user_id}'.")
-
         if requester_role == "Client":
-            if user_id != requester_id:
+            # Clients can only see their own history (Req 5.1, 10.1)
+            if cni != requester_cni:
                 raise _error(
                     status.HTTP_403_FORBIDDEN,
                     "FORBIDDEN",
                     "Clients may only access their own measurement history.",
                 )
-            records = await self._repo.get_history_for_user(requester_id)
+            records = await self._repo.get_history_for_cni(requester_cni)
 
         elif requester_role == "Tailor":
-            is_assigned = await self._profile_repo.is_tailor_assigned(
-                requester_uuid, target_uuid
-            )
+            # Tailors may only read history for explicitly assigned clients (Req 5.2, 5.4, 10.2–10.3)
+            is_assigned = await self._profile_repo.is_tailor_assigned(requester_cni, cni)
             if not is_assigned:
                 raise _error(
                     status.HTTP_403_FORBIDDEN,
                     "TAILOR_NOT_ASSIGNED",
-                    f"Tailor '{requester_id}' is not assigned to client '{user_id}'.",
+                    f"Tailor '{requester_cni}' is not assigned to client '{cni}'.",
                 )
-            records = await self._repo.get_history_for_user(user_id)
+            records = await self._repo.get_history_for_cni(cni)
 
         else:
-            records = await self._repo.get_history_for_user(user_id)
+            # Admin — unrestricted (Req 5.3, 13.x)
+            records = await self._repo.get_history_for_cni(cni)
 
+        # If no records, check whether the target user actually exists.
+        # An empty list is valid for a user who has no measurements (Req 10.5).
+        # But if the user does not exist at all, return 404.
         if not records:
-            user = await self._user_repo.get_by_id(target_uuid)
+            user = await self._user_repo.get_by_cni(cni)
             if user is None:
                 raise _error(
                     status.HTTP_404_NOT_FOUND,
                     "USER_NOT_FOUND",
-                    f"No user found with id '{user_id}'.",
+                    f"No user found with CNI '{cni}'.",
                 )
 
         return [
             MensurationResponse(
                 id_mesure=r.id_mesure,
-                user_id=str(r.user_id),
+                cni=r.cni,
                 tour_poitrine=float(r.tour_poitrine),
                 tour_taille=float(r.tour_taille),
                 tour_hanches=float(r.tour_hanches),

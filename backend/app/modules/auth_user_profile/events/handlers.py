@@ -5,14 +5,11 @@ Handlers registered at application startup:
   - measurements.estimated  → Measurement_Service (from Module 2)
   - report.saved            → Profile_Service (from Module 7)
   - profile_data_request    → Profile_Service (from Module 5)
-
-Note: event payloads use `user_id` (UUID string) — cni removed.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
-import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -39,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # Required fields for the measurements.estimated event
 _REQUIRED_MEASUREMENT_FIELDS = [
-    "user_id",
+    "cni",
     "tour_poitrine",
     "tour_taille",
     "tour_hanches",
@@ -60,29 +57,35 @@ async def handle_measurements_estimated(
     - Validates all measurement values are in (0, 300].
     - Computes a source_event_hash for idempotency.
     - Persists via MensurationRepository (idempotent: duplicate hash → skip).
+
+    Req 9.1–9.5
     """
     # 1. Validate required fields
     missing = [f for f in _REQUIRED_MEASUREMENT_FIELDS if f not in payload]
     if missing:
         logger.error(
             "measurements.estimated event missing required fields: %s — payload: %s",
-            missing, payload,
+            missing,
+            payload,
         )
         return
 
-    user_id: str = payload["user_id"]
+    cni: str = payload["cni"]
     tp: float = payload["tour_poitrine"]
     tt: float = payload["tour_taille"]
     th: float = payload["tour_hanches"]
     lb: float = payload["longueur_bras"]
-    h: float  = payload["hauteur"]
+    h: float = payload["hauteur"]
     source_timestamp: str = payload["source_timestamp"]
 
     # 2. Validate measurement values (0, 300]
     invalid_fields = []
     for name, value in [
-        ("tour_poitrine", tp), ("tour_taille", tt), ("tour_hanches", th),
-        ("longueur_bras", lb), ("hauteur", h),
+        ("tour_poitrine", tp),
+        ("tour_taille", tt),
+        ("tour_hanches", th),
+        ("longueur_bras", lb),
+        ("hauteur", h),
     ]:
         try:
             val = float(value)
@@ -94,30 +97,34 @@ async def handle_measurements_estimated(
 
     if invalid_fields:
         logger.error(
-            "measurements.estimated event has invalid values for %s — user_id=%s",
-            invalid_fields, user_id,
+            "measurements.estimated event has invalid measurement values for fields %s "
+            "(must be > 0 and <= 300) — cni=%s, payload: %s",
+            invalid_fields,
+            cni,
+            payload,
         )
         return
 
     # 3. Compute idempotency hash
     source_event_hash = hashlib.sha256(
-        f"{user_id}{tp}{tt}{th}{lb}{h}{source_timestamp}".encode()
+        f"{cni}{tp}{tt}{th}{lb}{h}{source_timestamp}".encode()
     ).hexdigest()
 
     repo = MensurationRepository(session)
 
-    # 4. Check for duplicate
+    # 4. Check for duplicate (pre-flight — race condition guard also in DB)
     if await repo.exists_event_hash(source_event_hash):
         logger.warning(
-            "Duplicate measurements.estimated event discarded — user_id=%s hash=%s",
-            user_id, source_event_hash,
+            "Duplicate measurements.estimated event discarded — cni=%s hash=%s",
+            cni,
+            source_event_hash,
         )
         return
 
     # 5. Persist
     try:
         await repo.create_mensuration(
-            user_id=user_id,
+            cni=cni,
             tour_poitrine=float(tp),
             tour_taille=float(tt),
             tour_hanches=float(th),
@@ -127,13 +134,15 @@ async def handle_measurements_estimated(
         )
     except MensurationUserNotFoundError:
         logger.error(
-            "measurements.estimated event references unknown user_id: %s — record not created.",
-            user_id,
+            "measurements.estimated event references unknown CNI: %s — record not created.",
+            cni,
         )
     except DuplicateEventError:
+        # Race condition: another worker processed the same event concurrently
         logger.warning(
-            "Duplicate measurements.estimated event (race condition) — user_id=%s hash=%s",
-            user_id, source_event_hash,
+            "Duplicate measurements.estimated event (race condition) discarded — cni=%s hash=%s",
+            cni,
+            source_event_hash,
         )
 
 
@@ -144,17 +153,22 @@ async def handle_report_saved(
     """
     Handle a report.saved event from Module 7.
 
-    - Validates the user_id exists.
-    - Archives the report reference (idempotent).
+    - Validates the CNI exists.
+    - Archives the report reference (idempotent: duplicate (cni, report_id) → skip).
+
+    Req 12.1–12.4
     """
-    user_id = payload.get("user_id")
+    cni = payload.get("cni")
     report_id = payload.get("report_id")
     date_generation_raw = payload.get("date_generation")
 
-    if not user_id or not report_id or not date_generation_raw:
-        logger.error("report.saved event missing required fields — payload: %s", payload)
+    if not cni or not report_id or not date_generation_raw:
+        logger.error(
+            "report.saved event missing required fields — payload: %s", payload
+        )
         return
 
+    # Parse date_generation
     if isinstance(date_generation_raw, datetime):
         date_generation = date_generation_raw
     else:
@@ -162,28 +176,25 @@ async def handle_report_saved(
             date_generation = datetime.fromisoformat(str(date_generation_raw))
         except (ValueError, TypeError):
             logger.error(
-                "report.saved event has invalid date_generation '%s' — user_id=%s",
-                date_generation_raw, user_id,
+                "report.saved event has invalid date_generation '%s' — cni=%s",
+                date_generation_raw,
+                cni,
             )
             return
 
     repo = ProfileRepository(session)
 
+    # Validate CNI exists
     try:
-        uid = uuid.UUID(user_id)
-    except ValueError:
-        logger.error("report.saved event has invalid user_id format: %s", user_id)
-        return
-
-    try:
-        await repo.get_user(uid)
+        await repo.get_user(cni)
     except ProfileUserNotFoundError:
         logger.error(
-            "report.saved event references unknown user_id: %s — report not archived.", user_id
+            "report.saved event references unknown CNI: %s — report not archived.", cni
         )
         return
 
-    await repo.add_rapport(user_id=uid, report_id=report_id, date_generation=date_generation)
+    # Archive (returns None if duplicate — silently handled per Req 12.4)
+    await repo.add_rapport(cni=cni, report_id=report_id, date_generation=date_generation)
 
 
 async def handle_profile_data_request(
@@ -194,35 +205,34 @@ async def handle_profile_data_request(
     """
     Handle a profile_data_request event from Module 5.
 
-    - Validates user exists by user_id.
+    - Validates user exists.
     - Retrieves latest measurement.
     - Publishes user.profile_data or user.profile_data.error.
-    """
-    user_id = payload.get("user_id")
-    if not user_id:
-        logger.error("profile_data_request event missing user_id — payload: %s", payload)
-        return
 
-    try:
-        uid = uuid.UUID(user_id)
-    except ValueError:
-        logger.error("profile_data_request event has invalid user_id format: %s", user_id)
+    Req 11.1–11.4
+    """
+    cni = payload.get("cni")
+    if not cni:
+        logger.error("profile_data_request event missing cni — payload: %s", payload)
         return
 
     profile_repo = ProfileRepository(session)
     mensuration_repo = MensurationRepository(session)
 
+    # 1. Validate user exists
     try:
-        await profile_repo.get_user(uid)
+        await profile_repo.get_user(cni)
     except ProfileUserNotFoundError:
-        await publish_user_profile_data_error(bus, user_id, "user_not_found")
+        await publish_user_profile_data_error(bus, cni, "user_not_found")
         return
 
-    mensurations = await mensuration_repo.get_history_for_user(user_id)
+    # 2. Retrieve measurement history (ordered DESC — most recent first)
+    mensurations = await mensuration_repo.get_history_for_cni(cni)
     if not mensurations:
-        await publish_user_profile_data_error(bus, user_id, "no_measurements")
+        await publish_user_profile_data_error(bus, cni, "no_measurements")
         return
 
+    # 3. Take the most recent (first element, since ordered DESC)
     latest = mensurations[0]
     mensuration_dict = {
         "id_mesure": latest.id_mesure,
@@ -238,13 +248,16 @@ async def handle_profile_data_request(
         ),
     }
 
-    await publish_user_profile_data(bus, user_id, [mensuration_dict])
+    await publish_user_profile_data(bus, cni, [mensuration_dict])
 
 
-# ── Handler factory functions ──────────────────────────────────────────────────
+# ── Handler factory functions (for session-bound registration at startup) ─────
 
 def make_measurements_handler(session_factory):
-    """Factory wrapping handle_measurements_estimated with a fresh DB session."""
+    """
+    Factory that wraps handle_measurements_estimated with a fresh DB session.
+    Register via: event_bus.subscribe("measurements.estimated", make_measurements_handler(AsyncSessionLocal))
+    """
     async def handler(payload: dict) -> None:
         async with session_factory() as session:
             try:
@@ -257,7 +270,10 @@ def make_measurements_handler(session_factory):
 
 
 def make_report_saved_handler(session_factory):
-    """Factory wrapping handle_report_saved with a fresh DB session."""
+    """
+    Factory that wraps handle_report_saved with a fresh DB session.
+    Register via: event_bus.subscribe("report.saved", make_report_saved_handler(AsyncSessionLocal))
+    """
     async def handler(payload: dict) -> None:
         async with session_factory() as session:
             try:
@@ -270,7 +286,10 @@ def make_report_saved_handler(session_factory):
 
 
 def make_profile_data_request_handler(session_factory, bus):
-    """Factory wrapping handle_profile_data_request with a fresh DB session."""
+    """
+    Factory that wraps handle_profile_data_request with a fresh DB session.
+    Register via: event_bus.subscribe("profile_data_request", make_profile_data_request_handler(AsyncSessionLocal, event_bus))
+    """
     async def handler(payload: dict) -> None:
         async with session_factory() as session:
             try:

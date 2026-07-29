@@ -63,27 +63,29 @@ class TokenInvalidError(Exception):
     """Raised when a JWT fails signature verification, has a bad `iss`, or is missing claims."""
 
 
-REQUIRED_CLAIMS: frozenset[str] = frozenset({"user_id", "role", "exp", "jti", "iss", "sub"})
+REQUIRED_CLAIMS: frozenset[str] = frozenset({"cni", "role", "exp", "jti", "iss", "sub"})
 
 
-def issue_token(user_id: str, role: str) -> str:
+def issue_token(cni: str, role: str) -> str:
     """
     Issue a signed HS256 JWT for the given user.
 
     Claims issued:
-      iss     — JWT_ISSUER
-      sub     — user_id (UUID string)
-      user_id — user_id (application-specific claim, replaces cni)
-      role    — role string ("Client" | "Tailor" | "Admin")
-      iat     — current UTC timestamp (seconds)
-      exp     — iat + JWT_EXPIRY_SECONDS (24 h)
-      jti     — UUID4 string (denylist logout)
+      iss  — JWT_ISSUER (e.g. "lova-fashion-auth")
+      sub  — cni (standard JWT subject)
+      cni  — cni (application-specific claim)
+      role — role string ("Client" | "Tailor" | "Admin")
+      iat  — current UTC timestamp (seconds)
+      exp  — iat + JWT_EXPIRY_SECONDS (exactly 24 h, Req 2.2)
+      jti  — UUID4 string (used for denylist logout, Req 3.1)
+
+    The JWT_SECRET is read from the environment and never returned.
     """
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "iss": JWT_ISSUER,
-        "sub": user_id,
-        "user_id": user_id,
+        "sub": cni,
+        "cni": cni,
         "role": role,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=JWT_EXPIRY_SECONDS)).timestamp()),

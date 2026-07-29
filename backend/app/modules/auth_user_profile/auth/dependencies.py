@@ -33,9 +33,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 @dataclass(frozen=True)
 class UserClaims:
-    """Decoded JWT claims injected into request handlers."""
+    """Decoded JWT claims injected into request handlers (Req 4.6)."""
 
-    user_id: str
+    cni: str
     role: str
 
 
@@ -70,10 +70,10 @@ async def get_current_user(
     Token Validation Flow (design.md):
       1. Extract token from "Authorization: Bearer <token>" header.
       2. Decode JWT, verify HS256 signature + iss claim (security.decode_token).
-      3. Confirm required claims present: user_id, role, exp, jti.
+      3. Confirm required claims present: cni, role, exp, jti.
       4. Confirm exp > NOW() (decode_token raises TokenExpiredError otherwise).
       5. Confirm jti NOT IN token_denylist.
-      6. Return UserClaims(user_id, role).
+      6. Return UserClaims(cni, role).
 
     Raises:
         HTTPException 401 – missing / expired / invalid / denied token.
@@ -119,9 +119,9 @@ async def get_current_user(
         )
 
     # Step 6: Return claims
-    user_id: str = payload.get("user_id", "")
+    cni: str = payload.get("cni", "")
     role: str = payload.get("role", "")
-    return UserClaims(user_id=user_id, role=role)
+    return UserClaims(cni=cni, role=role)
 
 
 # ── RBAC factory ───────────────────────────────────────────────────────────────

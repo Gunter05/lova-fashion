@@ -74,7 +74,7 @@ def _build_error(
     summary="Register a new user",
     responses={
         201: {"description": "User successfully registered"},
-        409: {"description": "Duplicate email", "model": ErrorResponse},
+        409: {"description": "Duplicate CNI or email", "model": ErrorResponse},
         422: {"description": "Validation failure", "model": ErrorResponse},
     },
 )
@@ -85,13 +85,13 @@ async def register(
     """
     Register a new user account.
 
-    **Request body:** nom, email, mot_de_passe
+    **Request body:** cni, nom, email, mot_de_passe, role
 
-    **Success:** 201 Created — user profile (id, nom, email, role, date_inscription)
+    **Success:** 201 Created — user profile (cni, nom, email, role, date_inscription)
 
     **Errors:**
-    - 409: Email already registered
-    - 422: Invalid email format, password length, or nom length
+    - 409: CNI or email already registered
+    - 422: Invalid CNI format, email format, password length, nom length, or role value
 
     **Requirements:** 1.1–1.10
     """
@@ -99,7 +99,7 @@ async def register(
 
     try:
         user = await service.register_user(data)
-        logger.info("User registered: id=%s email=%s", user.id, user.email)
+        logger.info("User registered: cni=%s email=%s", user.cni, user.email)
         return user
     except RegistrationError as exc:
         logger.warning("Registration conflict: field=%s message=%s", exc.field, exc.message)
@@ -218,17 +218,18 @@ async def logout(
 
     try:
         await service.logout_user(raw_token)
-        logger.info("User logged out: user_id=%s", current_user.user_id)
+        logger.info("User logged out: cni=%s", current_user.cni)
         return {"message": "Session terminated."}
     except TokenExpiredError:
-        logger.warning("Logout with expired token: user_id=%s", current_user.user_id)
+        # Req 3.3: expired tokens are not added to the denylist
+        logger.warning("Logout with expired token: cni=%s", current_user.cni)
         raise _build_error(
             status.HTTP_401_UNAUTHORIZED,
             "TOKEN_EXPIRED",
             "Session has already expired.",
         )
     except TokenInvalidError:
-        logger.warning("Logout with invalid token: user_id=%s", current_user.user_id)
+        logger.warning("Logout with invalid token: cni=%s", current_user.cni)
         raise _build_error(
             status.HTTP_401_UNAUTHORIZED,
             "TOKEN_INVALID",
