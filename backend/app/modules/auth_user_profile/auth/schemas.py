@@ -1,9 +1,10 @@
-"""Pydantic schemas for the Auth_Service (registration, login, logout, error responses)."""
+"""Pydantic schemas for the Auth_Service — no cni field anywhere."""
 from __future__ import annotations
-import re
+
+import uuid as _uuid_module
 from enum import Enum
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator, EmailStr
+from pydantic import BaseModel, Field, EmailStr
 
 
 class UserRole(str, Enum):
@@ -12,28 +13,14 @@ class UserRole(str, Enum):
     ADMIN = "Admin"
 
 
-
-
-CNI_REGEX = re.compile(r'^[A-Za-z0-9]{9}$')
-
-
 class RegisterRequest(BaseModel):
-    cni: str = Field(..., description="National Identity Card — exactly 9 alphanumeric characters")
     nom: str = Field(..., max_length=100, description="Full name")
     email: EmailStr
     mot_de_passe: str = Field(..., min_length=8, description="Password (min 8 characters)")
-    role: UserRole
-
-    @field_validator("cni")
-    @classmethod
-    def validate_cni(cls, v: str) -> str:
-        if not CNI_REGEX.match(v):
-            raise ValueError("CNI must be exactly 9 alphanumeric characters.")
-        return v
 
 
 class RegisterResponse(BaseModel):
-    cni: str
+    id: str
     nom: str
     email: str
     role: UserRole

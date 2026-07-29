@@ -37,7 +37,7 @@ class MensurationRepository:
 
     async def create_mensuration(
         self,
-        cni: str,
+        user_id: str,
         tour_poitrine: float,
         tour_taille: float,
         tour_hanches: float,
@@ -52,15 +52,20 @@ class MensurationRepository:
         For event-driven entries (Module 2), source_event_hash is set and must be unique.
 
         Raises:
-            UserNotFoundError: if the CNI has no corresponding User.
+            UserNotFoundError: if the user_id has no corresponding User.
             DuplicateEventError: if source_event_hash is already present (idempotency).
         """
+        import uuid as _uuid
+        try:
+            uid = _uuid.UUID(user_id)
+        except ValueError:
+            raise UserNotFoundError(f"Invalid user_id format: '{user_id}'.")
         # Verify user exists before inserting
         user_result = await self._session.execute(
-            select(UserModel).where(UserModel.cni == cni)
+            select(UserModel).where(UserModel.id == uid)
         )
         if user_result.scalar_one_or_none() is None:
-            raise UserNotFoundError(f"No user found with CNI '{cni}'.")
+            raise UserNotFoundError(f"No user found with id '{user_id}'.")
 
         # For event-driven entries, check idempotency guard before inserting
         if source_event_hash is not None:
@@ -71,7 +76,7 @@ class MensurationRepository:
 
         record = MensurationModel(
             id_mesure=str(uuid.uuid4()),
-            cni=cni,
+            user_id=uid,
             tour_poitrine=tour_poitrine,
             tour_taille=tour_taille,
             tour_hanches=tour_hanches,
@@ -94,17 +99,22 @@ class MensurationRepository:
         await self._session.refresh(record)
         return record
 
-    async def get_history_for_cni(
+    async def get_history_for_user(
         self,
-        cni: str,
+        user_id: str,
         order_desc: bool = True,
     ) -> list[MensurationModel]:
         """
-        Return all Mensuration records for the given CNI.
+        Return all Mensuration records for the given user_id (UUID string).
 
-        Ordered by date_mensuration DESC by default (Req 10.1, Property 5).
+        Ordered by date_mensuration DESC by default.
         Returns an empty list if the user has no records (never raises).
         """
+        import uuid as _uuid
+        try:
+            uid = _uuid.UUID(user_id)
+        except ValueError:
+            return []
         order_col = (
             MensurationModel.date_mensuration.desc()
             if order_desc
@@ -112,7 +122,7 @@ class MensurationRepository:
         )
         result = await self._session.execute(
             select(MensurationModel)
-            .where(MensurationModel.cni == cni)
+            .where(MensurationModel.user_id == uid)
             .order_by(order_col)
         )
         return list(result.scalars().all())
