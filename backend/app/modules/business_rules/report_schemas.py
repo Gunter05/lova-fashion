@@ -71,21 +71,13 @@ class CompatibilityEvaluatedEvent(BaseModel):
     """
     type: Literal["compatibility.evaluated"]
     emitted_at: datetime
-    cni: str = Field(..., min_length=9, max_length=9,
-                     description="9-character national identity number.")
+    user_id: str = Field(..., description="UUID of the user (replaces cni).")
     adjustment_id: uuid.UUID
     fabric_id: uuid.UUID
     model_id: uuid.UUID
     verdict: Literal["compatible", "incompatible", "minor_adjustments"]
     advice: str
     incompatible_zones: Optional[list[IncompatibleZoneItem]] = None
-
-    @field_validator("cni")
-    @classmethod
-    def cni_must_be_alphanumeric(cls, v: str) -> str:
-        if not v.isalnum():
-            raise ValueError("CNI must be exactly 9 alphanumeric characters.")
-        return v
 
 
 # ── API response schemas ───────────────────────────────────────────────────────
@@ -96,7 +88,7 @@ class ReportResponse(BaseModel):
     Req 5 AC1
     """
     report_id: uuid.UUID
-    cni: str
+    user_id: str
     adjustment_id: uuid.UUID
     fabric_id: uuid.UUID
     model_id: uuid.UUID
@@ -139,13 +131,13 @@ class ReportSavedEvent(BaseModel):
 
     Field names and types MUST match exactly what Module 1 expects:
     - type: str literal "report.saved"
-    - cni: str (9-char CNI)
+    - user_id: str (UUID of the user)
     - report_id: str (UUID serialised as plain string)
     - date_generation: str (ISO 8601 UTC timestamp string)
 
     Req 9 AC2 · Design §Inter-Module Data Contracts
     """
     type: Literal["report.saved"] = "report.saved"
-    cni: str
+    user_id: str
     report_id: str          # UUID as plain string — Module 1 expects str
     date_generation: str    # ISO 8601 UTC string — Module 1 expects str
