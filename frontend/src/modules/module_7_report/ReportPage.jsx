@@ -5,18 +5,21 @@ import { listMyReports, getReport } from '../../api/modules';
 const VERDICT_CONFIG = {
   compatible: {
     label: 'Compatible',
-    badge: 'bg-green-100 text-green-800 border-green-200',
-    icon: '✅',
+    badge: 'bg-[#4E6E58]/10 text-[#4E6E58] border-[#4E6E58]/20',
+    icon: '✓',
+    pct: 95,
   },
   partially_compatible: {
     label: 'Partiellement compatible',
-    badge: 'bg-amber-100 text-amber-800 border-amber-200',
-    icon: '⚠️',
+    badge: 'bg-amber-50 text-amber-700 border-amber-200',
+    icon: '~',
+    pct: 60,
   },
   incompatible: {
     label: 'Incompatible',
-    badge: 'bg-red-100 text-red-800 border-red-200',
-    icon: '❌',
+    badge: 'bg-red-50 text-red-700 border-red-200',
+    icon: '✕',
+    pct: 20,
   },
 };
 
@@ -24,14 +27,14 @@ export default function ReportPage() {
   const { user } = useAuth();
   const printRef = useRef(null);
 
-  const [reports,  setReports]  = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [loading,  setLoading]  = useState(true);
+  const [reports,    setReports]    = useState([]);
+  const [selected,   setSelected]   = useState(null);
+  const [loading,    setLoading]    = useState(true);
   const [detLoading, setDetLoading] = useState(false);
-  const [error,    setError]    = useState('');
+  const [error,      setError]      = useState('');
 
   useEffect(() => {
-    if (!user?.cni) return;
+    if (!user) return;
     (async () => {
       try {
         const res = await listMyReports();
@@ -61,43 +64,50 @@ export default function ReportPage() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   if (loading) return <Spinner />;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Rapport Final</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Synthèse complète : mesures · tissu · patron · compatibilité.</p>
+    <div className="space-y-5 max-w-lg mx-auto">
+      {/* Hero banner */}
+      <div
+        className="rounded-3xl p-6 text-white relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #2C1810 0%, #D95D39 100%)' }}
+      >
+        <p className="text-xs font-semibold tracking-widest uppercase text-white/60 mb-1">Module 7</p>
+        <h1 className="text-2xl font-extrabold leading-tight">
+          Votre vêtement<br />
+          <span className="text-white/80">taillé sur mesure</span>
+        </h1>
+        <p className="text-sm text-white/60 mt-2">Synthèse complète de vos mesures, tissu et patron.</p>
+        <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
       </div>
 
       {error && <Alert message={error} onClose={() => setError('')} />}
 
-      {/* Report list */}
       {reports.length === 0 && !loading ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-10 py-14 text-center space-y-3">
-          <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 border-2 border-rose-200 flex items-center justify-center">
-            <span className="text-2xl font-extrabold text-rose-400">7</span>
+        <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] px-8 py-12 text-center space-y-3">
+          <div className="w-16 h-16 mx-auto rounded-full bg-[#FAF8F5] border-2 border-[#E8E4DF] flex items-center justify-center">
+            <svg className="w-7 h-7 text-[#D95D39]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
+            </svg>
           </div>
-          <p className="text-sm text-gray-500">Aucun rapport généré pour le moment.</p>
-          <p className="text-xs text-gray-400">Complétez les modules 1 à 6 pour générer votre premier rapport automatiquement.</p>
+          <p className="text-sm font-semibold text-gray-700">Aucun rapport disponible</p>
+          <p className="text-xs text-gray-400">Complétez les modules 1 à 6 pour générer votre premier carnet de style.</p>
         </div>
       ) : (
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="space-y-3">
           {reports.map((r) => {
-            const cfg = VERDICT_CONFIG[r.verdict] ?? { label: r.verdict, badge: 'bg-gray-100 text-gray-600', icon: '📄' };
+            const cfg = VERDICT_CONFIG[r.verdict] ?? { label: r.verdict, badge: 'bg-gray-100 text-gray-600', icon: '•', pct: 0 };
             return (
               <button
                 key={r.report_id}
                 onClick={() => openReport(r)}
-                className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-left hover:shadow-md hover:border-rose-200 transition flex flex-col gap-2"
+                className="w-full bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5 text-left hover:shadow-md hover:border-[#D95D39]/30 transition"
               >
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full border ${cfg.badge}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${cfg.badge}`}>
                     {cfg.icon} {cfg.label}
                   </span>
                   <span className="text-xs text-gray-400">
@@ -105,30 +115,20 @@ export default function ReportPage() {
                   </span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900">Rapport #{r.report_id.slice(0, 8)}…</p>
-                {r.advice && (
-                  <p className="text-xs text-gray-500 line-clamp-2">{r.advice}</p>
-                )}
+                {r.advice && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{r.advice}</p>}
               </button>
             );
           })}
         </div>
       )}
 
-      {/* Detail modal */}
       {(selected || detLoading) && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
             {detLoading ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-4 border-gray-200 border-t-rose-500 rounded-full animate-spin" />
-              </div>
+              <div className="flex items-center justify-center py-20"><Spinner /></div>
             ) : selected ? (
-              <ReportDetail
-                report={selected}
-                onClose={() => setSelected(null)}
-                onPrint={handlePrint}
-                printRef={printRef}
-              />
+              <ReportDetail report={selected} onClose={() => setSelected(null)} onPrint={handlePrint} printRef={printRef} />
             ) : null}
           </div>
         </div>
@@ -138,130 +138,121 @@ export default function ReportPage() {
 }
 
 function ReportDetail({ report, onClose, onPrint, printRef }) {
-  const cfg = VERDICT_CONFIG[report.verdict] ?? { label: report.verdict, badge: 'bg-gray-100 text-gray-600', icon: '📄' };
+  const cfg = VERDICT_CONFIG[report.verdict] ?? { label: report.verdict, badge: 'bg-gray-100 text-gray-600', icon: '•', pct: 50 };
   const m = report.adjusted_measurements;
 
   return (
-    <div ref={printRef} className="p-6 space-y-6">
-      {/* Toolbar */}
+    <div ref={printRef} className="p-5 space-y-5">
       <div className="flex items-center justify-between print:hidden">
-        <h2 className="text-lg font-bold text-gray-900">Rapport de confection</h2>
+        <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto" />
+      </div>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-gray-900">Récapitulatif</h2>
         <div className="flex gap-2">
-          <button
-            onClick={onPrint}
-            className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 transition"
-          >
-            🖨 Imprimer
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-700 transition"
-          >
-            Fermer
-          </button>
+          <button onClick={onPrint} className="px-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-500 hover:bg-gray-50">🖨</button>
+          <button onClick={onClose} className="px-3 py-1.5 rounded-xl bg-gray-100 text-xs text-gray-700 hover:bg-gray-200">Fermer</button>
         </div>
       </div>
 
-      {/* Report header */}
-      <div className="border border-gray-100 rounded-xl p-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">Rapport #{report.report_id.slice(0, 8)}…</p>
-          <p className="text-sm text-gray-500">
-            {new Date(report.generated_at).toLocaleDateString('fr-FR', { dateStyle: 'long' })}
-          </p>
+      <p className="text-xs text-gray-400">Votre tenue sur mesure</p>
+
+      {/* Verdict gauge */}
+      <div className="bg-[#FAF8F5] rounded-2xl p-5 text-center">
+        <div className="relative w-28 h-28 mx-auto mb-3">
+          <svg className="w-28 h-28 -rotate-90" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#E8E4DF" strokeWidth="10" />
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#4E6E58" strokeWidth="10"
+              strokeDasharray={`${cfg.pct * 2.64} 264`} strokeLinecap="round" />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-2xl font-extrabold text-gray-900">{cfg.pct}%</span>
+          </div>
         </div>
-        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-semibold ${cfg.badge}`}>
-          <span>{cfg.icon}</span>
-          <span>{cfg.label}</span>
-        </div>
-        {report.advice && (
-          <p className="text-sm text-gray-700 pt-1">{report.advice}</p>
-        )}
+        <p className="text-sm font-semibold text-[#4E6E58]">{cfg.label} !</p>
       </div>
 
-      {/* Adjusted measurements */}
+      {report.advice && (
+        <div className="bg-[#4E6E58]/5 border border-[#4E6E58]/15 rounded-2xl px-4 py-3">
+          <p className="text-sm text-[#3A5242]">{report.advice}</p>
+        </div>
+      )}
+
       {m && (
-        <Section title="Mesures ajustées">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-700">Mesures ajustées</h3>
+          <div className="grid grid-cols-2 gap-2">
             {[
-              ['Poitrine',     m.adjusted_bust_cm],
-              ['Taille',       m.adjusted_waist_cm],
-              ['Hanches',      m.adjusted_hips_cm],
-              ['Élasticité',   m.elasticity_category],
-              ['Source règles', m.ease_source],
-            ].map(([label, val]) => (
-              <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
+              ['Tour de poitrine', m.adjusted_bust_cm, 'cm'],
+              ['Tour de taille',   m.adjusted_waist_cm, 'cm'],
+              ['Tour de hanches',  m.adjusted_hips_cm, 'cm'],
+              ['Élasticité',       m.elasticity_category, ''],
+            ].map(([label, val, unit]) => (
+              <div key={label} className="bg-[#FAF8F5] rounded-xl p-3">
                 <p className="text-xs text-gray-400">{label}</p>
-                <p className="text-base font-bold text-gray-900 mt-0.5">{val ?? '—'}</p>
+                <p className="text-base font-bold text-gray-900 mt-0.5">{val ?? '—'}<span className="text-xs font-normal text-gray-400"> {unit}</span></p>
               </div>
             ))}
           </div>
-        </Section>
+        </div>
       )}
 
-      {/* Incompatible zones */}
       {report.incompatible_zones?.length > 0 && (
-        <Section title="Zones incompatibles">
-          <div className="space-y-2">
-            {report.incompatible_zones.map((z, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3">
-                <span className="text-red-500">⚠</span>
-                <div className="text-sm">
-                  <p className="font-medium text-gray-800">{z.zone_name}</p>
-                  {z.reason && <p className="text-xs text-gray-500 mt-0.5">{z.reason}</p>}
-                </div>
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-700">Zones à surveiller</h3>
+          {report.incompatible_zones.map((z, i) => (
+            <div key={i} className="flex gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+              <span className="text-red-400 mt-0.5">⚠</span>
+              <div>
+                <p className="text-sm font-medium text-gray-800">{z.zone_name}</p>
+                {z.reason && <p className="text-xs text-gray-400 mt-0.5">{z.reason}</p>}
               </div>
-            ))}
-          </div>
-        </Section>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Display hints */}
       {report.display_hints && (
-        <Section title="Recommandations">
-          <div className="space-y-2">
-            {Object.entries(report.display_hints).map(([key, val]) => (
-              <div key={key} className="flex gap-2 text-sm">
-                <span className="text-gray-400">›</span>
-                <span className="text-gray-700"><strong className="text-gray-900">{key}:</strong> {String(val)}</span>
-              </div>
-            ))}
-          </div>
-        </Section>
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-700">Recommandations</h3>
+          {Object.entries(report.display_hints).map(([key, val]) => (
+            <div key={key} className="flex gap-2 text-sm">
+              <span className="text-[#D95D39]">›</span>
+              <span className="text-gray-700"><strong className="text-gray-900">{key}:</strong> {String(val)}</span>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* IDs reference */}
-      <div className="text-xs text-gray-400 space-y-0.5 pt-2 border-t border-gray-100">
+      <div className="text-xs text-gray-400 space-y-0.5 pt-2 border-t border-[#F0EDE8]">
         <p>Tissu ID : {report.fabric_id}</p>
         <p>Patron ID : {report.model_id ?? '—'}</p>
         <p>Ajustement ID : {report.adjustment_id}</p>
       </div>
-    </div>
-  );
-}
 
-function Section({ title, children }) {
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-gray-700 mb-3">{title}</h3>
-      {children}
+      <button
+        onClick={onClose}
+        className="w-full rounded-2xl py-3.5 text-sm font-bold text-white"
+        style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
+      >
+        Envoyer à l'atelier de confection →
+      </button>
     </div>
   );
 }
 
 function Alert({ message, onClose }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    <div className="flex items-center justify-between rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
       <span>{message}</span>
-      <button onClick={onClose} className="ml-4 font-bold">×</button>
+      <button onClick={onClose} className="ml-4 font-bold text-red-400">×</button>
     </div>
   );
 }
 
 function Spinner() {
   return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="w-8 h-8 border-4 border-gray-200 border-t-rose-500 rounded-full animate-spin" />
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <div className="w-8 h-8 border-4 border-[#F0EDE8] border-t-[#D95D39] rounded-full animate-spin" />
     </div>
   );
 }

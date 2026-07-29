@@ -51,7 +51,7 @@ class MensurationCreateRequest(BaseModel):
 
 class MensurationResponse(BaseModel):
     id_mesure: str
-    cni: str
+    user_id: str
     tour_poitrine: float
     tour_taille: float
     tour_hanches: float

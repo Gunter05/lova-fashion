@@ -1,10 +1,6 @@
 """
-SQLAlchemy ORM models for Module 1: Authentication & User Profile.
-
-These models map directly to the tables defined in:
-    backend/app/db/migrations/001_module1_schema.sql
-
-All column names, types, constraints, and defaults mirror the DDL exactly.
+SQLAlchemy ORM models — users table uses id (UUID) as primary key.
+cni has been removed entirely.
 """
 from __future__ import annotations
 
@@ -14,7 +10,6 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
@@ -23,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -30,23 +26,24 @@ from app.modules.auth_user_profile.auth.schemas import UserRole
 
 
 class UserModel(Base):
-    """Maps to the `users` table."""
+    """Maps to the `users` table. Primary key is id (UUID)."""
 
     __tablename__ = "users"
-    __table_args__ = (
-        CheckConstraint(r"cni ~ '^[A-Za-z0-9]{9}$'", name="ck_users_cni_format"),
-    )
 
-    cni: Mapped[str] = mapped_column(String(9), primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
     nom: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     mot_de_passe: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        SAEnum( 
-            UserRole, 
-            name="user_role", 
+        SAEnum(
+            UserRole,
+            name="user_role",
             values_callable=lambda x: [e.value for e in x],
-            create_constraint=True
+            create_constraint=True,
         ),
         nullable=False,
     )
@@ -55,7 +52,7 @@ class UserModel(Base):
         DateTime(timezone=True), nullable=False, default=datetime.utcnow
     )
 
-    # Relationships (back-populated by child models)
+    # Relationships
     photos: Mapped[list["PhotoProfilModel"]] = relationship(
         "PhotoProfilModel", back_populates="user", cascade="all, delete-orphan"
     )
@@ -75,8 +72,10 @@ class PhotoProfilModel(Base):
     id_photo: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    cni: Mapped[str] = mapped_column(
-        String(9), ForeignKey("users.cni", ondelete="CASCADE"), nullable=False
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
     )
     url_photo: Mapped[str] = mapped_column(Text, nullable=False)
     date_upload: Mapped[datetime] = mapped_column(
@@ -90,19 +89,14 @@ class MensurationModel(Base):
     """Maps to the `mensuration` table."""
 
     __tablename__ = "mensuration"
-    __table_args__ = (
-        CheckConstraint("tour_poitrine > 0 AND tour_poitrine <= 300", name="ck_mens_poitrine"),
-        CheckConstraint("tour_taille > 0 AND tour_taille <= 300",     name="ck_mens_taille"),
-        CheckConstraint("tour_hanches > 0 AND tour_hanches <= 300",   name="ck_mens_hanches"),
-        CheckConstraint("longueur_bras > 0 AND longueur_bras <= 300", name="ck_mens_bras"),
-        CheckConstraint("hauteur > 0 AND hauteur <= 300",             name="ck_mens_hauteur"),
-    )
 
     id_mesure: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    cni: Mapped[str] = mapped_column(
-        String(9), ForeignKey("users.cni", ondelete="CASCADE"), nullable=False
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
     )
     tour_poitrine: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
     tour_taille:   Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
@@ -122,14 +116,16 @@ class RapportArchiveModel(Base):
 
     __tablename__ = "rapport_archive"
     __table_args__ = (
-        UniqueConstraint("cni", "report_id", name="uq_rapport_cni_report_id"),
+        UniqueConstraint("user_id", "report_id", name="uq_rapport_user_report_id"),
     )
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    cni: Mapped[str] = mapped_column(
-        String(9), ForeignKey("users.cni", ondelete="CASCADE"), nullable=False
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
     )
     report_id: Mapped[str] = mapped_column(Text, nullable=False)
     date_generation: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -153,20 +149,16 @@ class TailorClientAssignmentModel(Base):
     """Maps to the `tailor_client_assignment` table."""
 
     __tablename__ = "tailor_client_assignment"
-    __table_args__ = (
-        # Composite PK declared via __table_args__ for clarity alongside FKs
-        # The primary_key=True on both columns handles this automatically in SQLAlchemy.
-        {},
-    )
+    __table_args__ = ({},)
 
-    tailor_cni: Mapped[str] = mapped_column(
-        String(9),
-        ForeignKey("users.cni", ondelete="CASCADE"),
+    tailor_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    client_cni: Mapped[str] = mapped_column(
-        String(9),
-        ForeignKey("users.cni", ondelete="CASCADE"),
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
     )
     assigned_at: Mapped[datetime] = mapped_column(
