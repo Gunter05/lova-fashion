@@ -1,6 +1,6 @@
 """
-Profile_Service — business logic for profile read/update, photo upload,
-report archiving, and admin user management.
+Profile_Service — profile read/update, photo upload, report archiving, admin ops.
+cni removed; user_id (UUID string from JWT) used throughout.
 
 Design reference: Components and Interfaces; API Endpoints — Profile Endpoints, Admin Endpoints
 Requirements: 6.1–6.8, 7.1–7.9, 12.5, 13.1–13.7
@@ -8,6 +8,7 @@ Requirements: 6.1–6.8, 7.1–7.9, 12.5, 13.1–13.7
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
@@ -37,7 +38,7 @@ _ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _MAX_FILE_SIZE = 5_242_880
 
 # Fields that may never be updated via UpdateProfileRequest
-_IMMUTABLE_FIELDS = {"cni", "date_inscription"}
+_IMMUTABLE_FIELDS = {"id", "date_inscription"}
 
 # Fields whose presence in the raw dict indicates a role-change attempt
 _ROLE_FIELD = "role"
@@ -58,9 +59,9 @@ class SupabaseStorage:
     """
 
     @staticmethod
-    async def upload(cni: str, file: UploadFile) -> str:
+    async def upload(user_id: str, file: UploadFile) -> str:
         """
-        Upload *file* for *cni* and return the public URL.
+        Upload *file* for *user_id* and return the public URL.
 
         Raises StorageUnavailableError when the storage backend is unreachable.
         """
@@ -76,11 +77,10 @@ class SupabaseStorage:
 
             if not supabase_url or not supabase_key:
                 # Environment not configured — generate a placeholder URL
-                # (This branch is hit in local dev without Supabase credentials.)
-                object_name = f"{cni}/{_uuid.uuid4()}.jpg"
+                object_name = f"{user_id}/{_uuid.uuid4()}.jpg"
                 return f"https://storage.example.com/photos/{object_name}"
 
-            object_name = f"{cni}/{_uuid.uuid4()}.jpg"
+            object_name = f"{user_id}/{_uuid.uuid4()}.jpg"
             contents = await file.read()
             await file.seek(0)  # reset for any downstream reads
 
@@ -104,11 +104,11 @@ class SupabaseStorage:
         except StorageUnavailableError:
             raise
         except Exception as exc:
-            logger.error("Supabase Storage upload failed for cni=%s: %s", cni, exc)
+            logger.error("Supabase Storage upload failed for user_id=%s: %s", user_id, exc)
             raise StorageUnavailableError("Storage service unavailable.") from exc
 
 
-# ── Profile_Service ───────────────────────────────────────────────────────────
+# ── ProfileService ────────────────────────────────────────────────────────────
 
 class ProfileService:
     """
@@ -125,24 +125,24 @@ class ProfileService:
 
     # ── Task 16.1 — get_profile ───────────────────────────────────────────────
 
-    async def get_profile(self, cni: str) -> UserProfileResponse:
+    async def get_profile(self, user_id: str) -> UserProfileResponse:
         """
-        Retrieve the profile for *cni*.
+        Retrieve the profile for *user_id* (UUID string).
 
         Raises HTTP 404 when the user does not exist.
         Requirements: 6.1
         """
         try:
-            user = await self._repo.get_user(cni)
-        except UserNotFoundError:
+            user = await self._repo.get_user(uuid.UUID(user_id))
+        except (UserNotFoundError, ValueError):
             raise HTTPException(status_code=404, detail={
                 "error": "USER_NOT_FOUND",
-                "field": "cni",
-                "message": f"No user found with CNI '{cni}'.",
+                "field": "user_id",
+                "message": f"No user found with id '{user_id}'.",
             })
 
         return UserProfileResponse(
-            cni=user.cni,
+            id=str(user.id),
             nom=user.nom,
             email=user.email,
             role=UserRole(user.role),
@@ -153,23 +153,23 @@ class ProfileService:
 
     async def update_profile(
         self,
-        cni: str,
+        user_id: str,
         data: UpdateProfileRequest,
         requester_role: str,
         raw_body: dict[str, Any] | None = None,
     ) -> UserProfileResponse:
         """
-        Update nom and/or email for the user identified by *cni*.
+        Update nom and/or email for the user identified by *user_id*.
 
         *raw_body* is the original parsed dict (before Pydantic strips unknowns).
-        This lets the service detect attempts to set immutable fields (cni,
+        This lets the service detect attempts to set immutable fields (id,
         date_inscription) or a role field by a non-Admin.
 
         Raises:
-            HTTP 422 IMMUTABLE_FIELD  — raw_body contains 'cni' or 'date_inscription'
+            HTTP 422 IMMUTABLE_FIELD      — raw_body contains 'id' or 'date_inscription'
             HTTP 403 ROLE_CHANGE_FORBIDDEN — raw_body contains 'role' and caller is not Admin
-            HTTP 422 EMPTY_UPDATE     — no recognised updatable fields present
-            HTTP 409                  — new email already in use
+            HTTP 422 EMPTY_UPDATE         — no recognised updatable fields present
+            HTTP 409                      — new email already in use
         Requirements: 6.2–6.8
         """
         if raw_body is None:
@@ -194,8 +194,6 @@ class ProfileService:
                 })
 
         # 3. Reject empty / no-op update body (Req 6.8)
-        # Pydantic has already validated email format and nom length; check that at
-        # least one of the model's known fields is actually set.
         update_kwargs: dict[str, Any] = {}
         if data.nom is not None:
             update_kwargs["nom"] = data.nom
@@ -211,12 +209,12 @@ class ProfileService:
 
         # 4. Persist
         try:
-            user = await self._repo.update_user(cni, **update_kwargs)
-        except UserNotFoundError:
+            user = await self._repo.update_user(uuid.UUID(user_id), **update_kwargs)
+        except (UserNotFoundError, ValueError):
             raise HTTPException(status_code=404, detail={
                 "error": "USER_NOT_FOUND",
-                "field": "cni",
-                "message": f"No user found with CNI '{cni}'.",
+                "field": "user_id",
+                "message": f"No user found with id '{user_id}'.",
             })
         except DuplicateEmailError:
             raise HTTPException(status_code=409, detail={
@@ -226,7 +224,7 @@ class ProfileService:
             })
 
         return UserProfileResponse(
-            cni=user.cni,
+            id=str(user.id),
             nom=user.nom,
             email=user.email,
             role=UserRole(user.role),
@@ -237,7 +235,7 @@ class ProfileService:
 
     async def upload_photo(
         self,
-        cni: str,
+        user_id: str,
         file: UploadFile,
         storage: type[SupabaseStorage] | None = None,
     ) -> PhotoProfilResponse:
@@ -269,8 +267,6 @@ class ProfileService:
             })
 
         # 2. Empty file check (Req 7.6)
-        # UploadFile.size may be None if the client didn't send Content-Length.
-        # In that case we read the content to determine size.
         file_size = file.size
         if file_size is None:
             content = await file.read()
@@ -294,9 +290,12 @@ class ProfileService:
 
         # 4. Upload to storage (Req 7.3, 7.8)
         try:
-            url_photo = await storage.upload(cni, file)
+            url_photo = await storage.upload(user_id, file)
         except StorageUnavailableError as exc:
-            logger.error("Supabase Storage unavailable during photo upload for cni=%s: %s", cni, exc)
+            logger.error(
+                "Supabase Storage unavailable during photo upload for user_id=%s: %s",
+                user_id, exc,
+            )
             raise HTTPException(status_code=503, detail={
                 "error": "STORAGE_UNAVAILABLE",
                 "field": None,
@@ -305,12 +304,12 @@ class ProfileService:
 
         # 5. Persist PhotoProfil record (Req 7.1, 7.2, 7.3, 7.4)
         try:
-            photo = await self._repo.add_photo(cni, url_photo)
-        except UserNotFoundError:
+            photo = await self._repo.add_photo(uuid.UUID(user_id), url_photo)
+        except (UserNotFoundError, ValueError):
             raise HTTPException(status_code=404, detail={
                 "error": "USER_NOT_FOUND",
-                "field": "cni",
-                "message": f"No user found with CNI '{cni}'.",
+                "field": "user_id",
+                "message": f"No user found with id '{user_id}'.",
             })
 
         return PhotoProfilResponse(
@@ -321,13 +320,13 @@ class ProfileService:
 
     # ── Task 16.4 — get_photo_history ─────────────────────────────────────────
 
-    async def get_photo_history(self, cni: str) -> list[PhotoProfilResponse]:
+    async def get_photo_history(self, user_id: str) -> list[PhotoProfilResponse]:
         """
-        Return all PhotoProfil records for *cni* ordered by date_upload DESC.
+        Return all PhotoProfil records for *user_id* ordered by date_upload DESC.
         Returns an empty list when the user has no photos.
         Requirements: 7.9
         """
-        photos = await self._repo.get_photos(cni)
+        photos = await self._repo.get_photos(uuid.UUID(user_id))
         return [
             PhotoProfilResponse(
                 id_photo=p.id_photo,
@@ -339,13 +338,13 @@ class ProfileService:
 
     # ── Task 16.5 — get_report_history ────────────────────────────────────────
 
-    async def get_report_history(self, cni: str) -> list[RapportArchiveResponse]:
+    async def get_report_history(self, user_id: str) -> list[RapportArchiveResponse]:
         """
-        Return all archived report references for *cni* ordered by archived_at DESC.
+        Return all archived report references for *user_id* ordered by archived_at DESC.
         Returns an empty list when the user has no archived reports.
         Requirements: 12.5
         """
-        rapports = await self._repo.get_rapports(cni)
+        rapports = await self._repo.get_rapports(uuid.UUID(user_id))
         return [
             RapportArchiveResponse(
                 report_id=r.report_id,
@@ -365,7 +364,7 @@ class ProfileService:
         users = await self._repo.list_users()
         return [
             AdminUserResponse(
-                cni=u.cni,
+                id=str(u.id),
                 nom=u.nom,
                 email=u.email,
                 role=UserRole(u.role),
@@ -379,7 +378,7 @@ class ProfileService:
 
     async def update_user_role(
         self,
-        target_cni: str,
+        target_id: str,
         new_role: str,
         requester_role: str,
     ) -> AdminUserResponse:
@@ -387,23 +386,23 @@ class ProfileService:
         Change the role of a non-Admin user (Admin-only operation).
 
         Raises:
-            HTTP 404                  — target user not found
+            HTTP 404                      — target user not found
             HTTP 403 ADMIN_ROLE_PROTECTED — target user is already an Admin
         Requirements: 13.2–13.4
         """
-        # Fetch target user
         try:
-            target = await self._repo.get_user(target_cni)
-        except UserNotFoundError:
+            target = await self._repo.get_user(uuid.UUID(target_id))
+        except (UserNotFoundError, ValueError):
             raise HTTPException(status_code=404, detail={
                 "error": "USER_NOT_FOUND",
-                "field": "cni",
-                "message": f"No user found with CNI '{target_cni}'.",
+                "field": "user_id",
+                "message": f"No user found with id '{target_id}'.",
             })
 
         # Protect Admin accounts from role reassignment (Req 13.4)
-        current_role = target.role
-        current_role_value = current_role.value if hasattr(current_role, "value") else str(current_role)
+        current_role_value = (
+            target.role.value if hasattr(target.role, "value") else str(target.role)
+        )
         if current_role_value == UserRole.ADMIN.value:
             raise HTTPException(status_code=403, detail={
                 "error": "ADMIN_ROLE_PROTECTED",
@@ -411,11 +410,10 @@ class ProfileService:
                 "message": "The role of an Admin user cannot be changed through this endpoint.",
             })
 
-        # Persist the role change
-        updated = await self._repo.update_role(target_cni, UserRole(new_role))
+        updated = await self._repo.update_role(uuid.UUID(target_id), UserRole(new_role))
 
         return AdminUserResponse(
-            cni=updated.cni,
+            id=str(updated.id),
             nom=updated.nom,
             email=updated.email,
             role=UserRole(updated.role),
@@ -425,7 +423,7 @@ class ProfileService:
 
     # ── Task 17.3 — deactivate_user ───────────────────────────────────────────
 
-    async def deactivate_user(self, target_cni: str) -> None:
+    async def deactivate_user(self, target_id: str) -> None:
         """
         Deactivate a user account (set is_active = False).
 
@@ -435,19 +433,17 @@ class ProfileService:
         Raises HTTP 404 when the target user does not exist.
         Requirements: 13.5–13.7
         """
-        # Fetch target user
         try:
-            target = await self._repo.get_user(target_cni)
-        except UserNotFoundError:
+            target = await self._repo.get_user(uuid.UUID(target_id))
+        except (UserNotFoundError, ValueError):
             raise HTTPException(status_code=404, detail={
                 "error": "USER_NOT_FOUND",
-                "field": "cni",
-                "message": f"No user found with CNI '{target_cni}'.",
+                "field": "user_id",
+                "message": f"No user found with id '{target_id}'.",
             })
 
         # Idempotent: already inactive — return without modifying (Req 13.7)
         if not target.is_active:
             return
 
-        # Deactivate via UserRepository (which holds set_is_active)
-        await self._user_repo.set_is_active(target_cni, False)
+        await self._user_repo.set_is_active(uuid.UUID(target_id), False)
