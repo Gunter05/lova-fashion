@@ -57,7 +57,7 @@ async def get_my_profile(
     Auth: any role.
     Requirements: 6.1
     """
-    return await _service(db).get_profile(current_user.user_id)
+    return await _service(db).get_profile(current_user.cni)
 
 
 @router.patch(
@@ -86,7 +86,7 @@ async def update_my_profile(
         raw_body = {}
 
     return await _service(db).update_profile(
-        user_id=current_user.user_id,
+        cni=current_user.cni,
         data=data,
         requester_role=current_user.role,
         raw_body=raw_body,
@@ -109,7 +109,7 @@ async def upload_photo(
     Auth: any role.
     Requirements: 7.1–7.8
     """
-    return await _service(db).upload_photo(user_id=current_user.user_id, file=file)
+    return await _service(db).upload_photo(cni=current_user.cni, file=file)
 
 
 @router.get(
@@ -128,7 +128,7 @@ async def get_photo_history(
     Auth: any role.
     Requirements: 7.9
     """
-    return await _service(db).get_photo_history(current_user.user_id)
+    return await _service(db).get_photo_history(current_user.cni)
 
 
 @router.get(
@@ -147,7 +147,7 @@ async def get_report_history(
     Auth: any role.
     Requirements: 12.5
     """
-    return await _service(db).get_report_history(current_user.user_id)
+    return await _service(db).get_report_history(current_user.cni)
 
 
 # ── Admin endpoints (Admin role only) ─────────────────────────────────────────
@@ -171,13 +171,13 @@ async def list_all_users(
 
 
 @router.patch(
-    "/admin/users/{user_id}/role",
+    "/admin/users/{cni}/role",
     response_model=AdminUserResponse,
     status_code=status.HTTP_200_OK,
     summary="Change a user's role (Admin only)",
 )
 async def update_user_role(
-    user_id: str,
+    cni: str,
     data: RoleUpdateRequest,
     current_user: UserClaims = Depends(require_role("Admin")),
     db: AsyncSession = Depends(get_db),
@@ -189,20 +189,20 @@ async def update_user_role(
     Requirements: 13.2–13.4
     """
     return await _service(db).update_user_role(
-        target_id=user_id,
+        target_cni=cni,
         new_role=data.role.value,
         requester_role=current_user.role,
     )
 
 
 @router.patch(
-    "/admin/users/{user_id}/deactivate",
+    "/admin/users/{cni}/deactivate",
     status_code=status.HTTP_200_OK,
     summary="Deactivate a user account (Admin only)",
     dependencies=[Depends(require_role("Admin"))],
 )
 async def deactivate_user(
-    user_id: str,
+    cni: str,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """
@@ -211,5 +211,5 @@ async def deactivate_user(
     Auth: Admin only.
     Requirements: 13.5–13.7
     """
-    await _service(db).deactivate_user(user_id)
+    await _service(db).deactivate_user(cni)
     return {"message": "Account deactivated."}

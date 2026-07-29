@@ -1,4 +1,4 @@
-"""Pydantic schemas for the Profile_Service — cni removed, id (UUID) used everywhere."""
+"""Pydantic schemas for the Profile_Service (profile, photos, admin, reports)."""
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
@@ -7,7 +7,7 @@ from app.modules.auth_user_profile.auth.schemas import UserRole
 
 
 class UserProfileResponse(BaseModel):
-    id: str
+    cni: str
     nom: str
     email: str
     role: UserRole
@@ -17,6 +17,8 @@ class UserProfileResponse(BaseModel):
 class UpdateProfileRequest(BaseModel):
     nom: Optional[str] = Field(None, max_length=100, description="Full name (max 100 chars)")
     email: Optional[EmailStr] = Field(None, description="Valid email address")
+    # Note: cni, date_inscription, and role are NOT accepted here.
+    # Attempting to include them will be rejected at the service layer.
 
 
 class PhotoProfilResponse(BaseModel):
@@ -32,7 +34,7 @@ class RapportArchiveResponse(BaseModel):
 
 
 class AdminUserResponse(BaseModel):
-    id: str
+    cni: str
     nom: str
     email: str
     role: UserRole

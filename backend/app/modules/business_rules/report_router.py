@@ -48,7 +48,7 @@ async def _get_caller(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
 ) -> tuple[str, str]:
     """
-    Decode the Bearer JWT issued by Module 1 and return (user_id, role).
+    Decode the Bearer JWT issued by Module 1 and return (cni, role).
 
     Raises HTTP 401 if the token is missing, expired, or has an invalid signature.
     NFR-02
@@ -67,17 +67,17 @@ async def _get_caller(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user_id: str | None = payload.get("user_id") or payload.get("sub")
+    cni: str | None = payload.get("cni")
     role: str | None = payload.get("role")
 
-    if not user_id or not role:
+    if not cni or not role:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token incomplet : claims 'user_id' ou 'role' manquants.",
+            detail="Token incomplet : claims 'cni' ou 'role' manquants.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return user_id, role
+    return cni, role
 
 
 # ── GET /reports/me ──────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ async def list_my_reports(
     Auth: Client role only (enforced via x-user-role header).
     Req 6 AC1–4
     """
-    caller_id, caller_role = caller
+    caller_cni, caller_role = caller
 
     if caller_role.lower() != "client":
         raise HTTPException(
@@ -108,7 +108,7 @@ async def list_my_reports(
             detail="Only clients may access their own report list.",
         )
 
-    reports = await _service.list_reports_for_client(caller_id, db)
+    reports = await _service.list_reports_for_client(caller_cni, db)
     summaries = ReportService.to_summary_list(reports)
     return ReportListResponse(reports=summaries, total=len(summaries))
 
@@ -116,18 +116,18 @@ async def list_my_reports(
 # ── GET /reports/client/{cni} ────────────────────────────────────────────────
 
 @router.get(
-    "/client/{user_id}",
+    "/client/{cni}",
     response_model=ReportListResponse,
     status_code=status.HTTP_200_OK,
     summary="List all reports for a specific client (Tailor / Admin only)",
 )
 async def list_client_reports(
-    user_id: str,
+    cni: str,
     caller: tuple[str, str] = Depends(_get_caller),
     db: AsyncSession = Depends(get_db),
 ) -> ReportListResponse:
     """
-    Return all reports for the client identified by `user_id` (UUID), newest first.
+    Return all reports for the client identified by `cni`, newest first.
     Returns `reports=[]` and `total=0` when no reports exist.
 
     Auth: Tailor or Admin role only.
@@ -141,7 +141,8 @@ async def list_client_reports(
             detail="Only tailors and admins may access client report lists.",
         )
 
-    reports = await _service.list_reports_for_client_as_tailor(user_id, db)
+    # _assert_user_exists is called inside list_reports_for_client_as_tailor → 404
+    reports = await _service.list_reports_for_client_as_tailor(cni, db)
     summaries = ReportService.to_summary_list(reports)
     return ReportListResponse(reports=summaries, total=len(summaries))
 
@@ -169,9 +170,9 @@ async def get_report(
 
     Req 5 AC1–5
     """
-    caller_id, caller_role = caller
+    caller_cni, caller_role = caller
 
-    report = await _service.get_report(report_id, caller_id, caller_role, db)
+    report = await _service.get_report(report_id, caller_cni, caller_role, db)
 
     # Deserialise the JSONB snapshot back into the typed model
     snapshot = AdjustedMeasurementsSnapshot.model_validate(report.adjusted_measurements)
@@ -186,7 +187,7 @@ async def get_report(
 
     return ReportResponse(
         report_id=report.id_report,
-        user_id=str(report.user_id) if hasattr(report, 'user_id') else str(getattr(report, 'cni', '')),
+        cni=report.cni,
         adjustment_id=report.adjustment_id,
         fabric_id=report.fabric_id,
         model_id=report.model_id,

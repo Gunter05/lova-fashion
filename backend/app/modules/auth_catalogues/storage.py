@@ -35,8 +35,7 @@ load_dotenv()
 # Constants
 # ---------------------------------------------------------------------------
 
-BUCKET_NAME = "fabric_photos"
-CAPTURE_BUCKET_NAME = "photos_capture"
+BUCKET_NAME = "fabric-photos"
 
 # Map common MIME types to file extensions used when building the storage path.
 _CONTENT_TYPE_TO_EXT: dict[str, str] = {
@@ -76,7 +75,7 @@ def _get_supabase_client() -> Client:
         StorageUploadError: if SUPABASE_URL or SUPABASE_SERVICE_KEY are not set.
     """
     url = os.environ.get("SUPABASE_URL", "").strip()
-    key = (os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY") or "").strip()
+    key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
 
     if not url or not key:
         raise StorageUploadError(
@@ -145,56 +144,6 @@ async def upload_fabric_photo(
 
     try:
         public_url: str = client.storage.from_(BUCKET_NAME).get_public_url(file_path)
-    except Exception as exc:
-        raise StorageUploadError(
-            f"Upload succeeded but could not retrieve public URL for '{file_path}': {exc}"
-        ) from exc
-
-    return public_url
-
-
-
-async def upload_capture_photo(
-    session_id: str,
-    view: str,
-    file_bytes: bytes,
-    content_type: str,
-) -> str:
-    """Upload a measurement capture photo (face or profile) to the ``photos_capture`` bucket.
-
-    Args:
-        session_id:   UUID of the measurement session.
-        view:         Either ``"face"`` or ``"profile"``.
-        file_bytes:   Raw bytes of the image.
-        content_type: MIME type of the file.
-
-    Returns:
-        The public URL of the uploaded file.
-
-    Raises:
-        StorageUploadError: if the upload fails.
-    """
-    try:
-        client: Client = _get_supabase_client()
-    except StorageUploadError:
-        raise
-
-    ext = _ext_from_content_type(content_type)
-    file_path = f"{session_id}/{view}/{uuid4()}.{ext}"
-
-    try:
-        client.storage.from_(CAPTURE_BUCKET_NAME).upload(
-            path=file_path,
-            file=file_bytes,
-            file_options={"content-type": content_type},
-        )
-    except Exception as exc:
-        raise StorageUploadError(
-            f"Failed to upload {view} capture photo for session '{session_id}': {exc}"
-        ) from exc
-
-    try:
-        public_url: str = client.storage.from_(CAPTURE_BUCKET_NAME).get_public_url(file_path)
     except Exception as exc:
         raise StorageUploadError(
             f"Upload succeeded but could not retrieve public URL for '{file_path}': {exc}"

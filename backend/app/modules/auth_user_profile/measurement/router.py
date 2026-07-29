@@ -57,7 +57,7 @@ async def create_mensuration(
     Requirements: 8.1–8.6
     """
     return await _service(db).create_manual_mensuration(
-        user_id=current_user.user_id,
+        cni=current_user.cni,
         data=data,
     )
 
@@ -82,8 +82,8 @@ async def get_my_mensurations(
     Requirements: 10.1, 10.4, 10.5
     """
     return await _service(db).get_history(
-        user_id=current_user.user_id,
-        requester_id=current_user.user_id,
+        cni=current_user.cni,
+        requester_cni=current_user.cni,
         requester_role="Client",
     )
 
@@ -91,29 +91,29 @@ async def get_my_mensurations(
 # ── GET /users/{cni}/mensurations ─────────────────────────────────────────────
 
 @router.get(
-    "/users/{user_id}/mensurations",
+    "/users/{cni}/mensurations",
     response_model=list[MensurationResponse],
     status_code=status.HTTP_200_OK,
     summary="Get a client's measurement history (Tailor/Admin only)",
 )
 async def get_user_mensurations(
-    user_id: str,
+    cni: str,
     current_user: UserClaims = Depends(require_role("Tailor", "Admin")),
     db: AsyncSession = Depends(get_db),
 ) -> list[MensurationResponse]:
     """
-    Return all Mensuration records for the user identified by ``user_id`` (UUID).
+    Return all Mensuration records for the user identified by ``cni``.
 
     - Tailor: only for clients explicitly assigned to them. Returns 403 otherwise.
     - Admin: unrestricted access.
 
-    Returns 404 if the target user_id does not correspond to an existing user.
+    Returns 404 if the target CNI does not correspond to an existing user.
 
     Auth: Tailor or Admin role.
     Requirements: 5.2–5.4, 10.2–10.4
     """
     return await _service(db).get_history(
-        user_id=user_id,
-        requester_id=current_user.user_id,
+        cni=cni,
+        requester_cni=current_user.cni,
         requester_role=current_user.role,
     )
