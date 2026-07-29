@@ -20,9 +20,18 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from hypothesis import given, settings
+
+
+async def override_get_caller(request: Request) -> tuple[str, str]:
+    cni = request.headers.get("x-user-cni")
+    role = request.headers.get("x-user-role")
+    if not cni or not role:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return cni, role
 from hypothesis import strategies as st
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -217,7 +226,10 @@ def report_db():
             finally:
                 await s.close()
 
+    from app.modules.business_rules.report_router import _get_caller
+
     app.dependency_overrides[get_db] = override
+    app.dependency_overrides[_get_caller] = override_get_caller
     yield
     app.dependency_overrides.clear()
     _run(_ENGINE.dispose())

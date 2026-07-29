@@ -97,7 +97,7 @@ async def _seed_user(session: AsyncSession, cni: str) -> None:
         "nom": "Test User",
         "email": f"{cni.lower()}@example.com",
         "pwd": "hashed",
-        "role": "CLIENT",  # SAEnum stores enum *name*, not value
+        "role": "Client",  # SAEnum stores enum value now
     })
     await session.flush()
 

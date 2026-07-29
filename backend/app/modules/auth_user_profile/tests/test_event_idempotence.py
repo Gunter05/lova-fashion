@@ -76,7 +76,7 @@ async def _setup_schema(engine) -> None:
         """))
         await conn.execute(text("""
             INSERT OR IGNORE INTO users (cni, nom, email, mot_de_passe, role)
-            VALUES (:cni, 'Event Test User', 'evtuser@example.com', 'hashed', 'CLIENT')
+            VALUES (:cni, 'Event Test User', 'evtuser@example.com', 'hashed', 'Client')
         """), {"cni": TEST_CNI})
 
 

@@ -633,7 +633,7 @@ async def init_model(
     """
     # `creator_id` is taken from the x-user-id header set by Module 1.
     # Fall back to a placeholder UUID if the header is absent (allows local testing).
-    creator_id: str = x_user_id or "00000000-0000-0000-0000-000000000000"
+    creator_id: str = x_user_id or "11111111-1111-1111-1111-111111111111"
 
     image_bytes: bytes = await image.read()
     filename: str = image.filename or "upload"
