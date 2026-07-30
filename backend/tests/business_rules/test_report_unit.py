@@ -4,7 +4,7 @@ Unit tests for Module 7 — Final Result & Report (Synthesis).
 Covers (Tasks 24–27):
   - build_display_hints()           — all three verdict values + incompatible zones
   - _validate_measurements()        — valid, negative, NULL inputs
-  - CompatibilityEvaluatedEvent     — valid payloads, invalid verdict, CNI length
+  - CompatibilityEvaluatedEvent     — valid payloads, invalid verdict
   - ReportSavedEvent                — field names and types for Module 1 contract
   - AdjustedMeasurementsSnapshot    — round-trip serialisation (Hypothesis)
   - build_display_hints() invariants — Hypothesis property tests (Tasks 34–36)
@@ -131,7 +131,7 @@ def _valid_compatible_payload(**overrides) -> dict:
     base = {
         "type": "compatibility.evaluated",
         "emitted_at": "2025-07-25T10:00:00Z",
-        "cni": "ABC123456",
+        "user_id": str(uuid.uuid4()),
         "adjustment_id": str(uuid.uuid4()),
         "fabric_id": str(uuid.uuid4()),
         "model_id": str(uuid.uuid4()),
@@ -167,19 +167,12 @@ class TestCompatibilityEvaluatedEvent:
                 _valid_compatible_payload(verdict="unknown_verdict")
             )
 
-    def test_cni_too_short_raises_validation_error(self):
-        """CNI shorter than 9 chars → ValidationError."""
+    def test_user_id_missing_raises_validation_error(self):
+        """Missing user_id → ValidationError."""
+        payload = _valid_compatible_payload()
+        del payload["user_id"]
         with pytest.raises(ValidationError):
-            CompatibilityEvaluatedEvent.model_validate(
-                _valid_compatible_payload(cni="SHORT")
-            )
-
-    def test_cni_too_long_raises_validation_error(self):
-        """CNI longer than 9 chars → ValidationError."""
-        with pytest.raises(ValidationError):
-            CompatibilityEvaluatedEvent.model_validate(
-                _valid_compatible_payload(cni="TOOLONGCNI0")
-            )
+            CompatibilityEvaluatedEvent.model_validate(payload)
 
     def test_minor_adjustments_verdict_parses(self):
         """minor_adjustments is a valid verdict."""
@@ -197,24 +190,24 @@ class TestReportSavedEvent:
     def test_field_names_and_types(self):
         """
         Verify field names and types exactly match Module 1's handle_report_saved
-        contract: type (str), cni (str), report_id (str), date_generation (str).
+        contract: type (str), user_id (str), report_id (str), date_generation (str).
         Req 9 AC2
         """
         event = ReportSavedEvent(
-            cni="ABC123456",
+            user_id=str(uuid.uuid4()),
             report_id=str(uuid.uuid4()),
             date_generation=datetime.now(timezone.utc).isoformat(),
         )
         dumped = event.model_dump()
         assert dumped["type"] == "report.saved"
-        assert isinstance(dumped["cni"], str)
+        assert isinstance(dumped["user_id"], str)
         assert isinstance(dumped["report_id"], str)
         assert isinstance(dumped["date_generation"], str)
 
     def test_default_type_is_report_saved(self):
         """type field defaults to 'report.saved' without explicit assignment."""
         event = ReportSavedEvent(
-            cni="ABC123456",
+            user_id="some-user-uuid",
             report_id="some-uuid",
             date_generation="2025-07-25T10:00:00+00:00",
         )

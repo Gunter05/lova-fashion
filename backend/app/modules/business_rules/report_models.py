@@ -43,7 +43,7 @@ class RapportMesure(Base):
             "verdict IN ('compatible', 'incompatible', 'minor_adjustments')",
             name="ck_rapport_mesure_verdict",
         ),
-        Index("idx_rapport_mesure_cni_generated", "cni", "generated_at"),
+        Index("idx_rapport_mesure_user_id_generated", "user_id", "generated_at"),
     )
 
     # ── Primary key ──────────────────────────────────────────────────────────
@@ -55,11 +55,11 @@ class RapportMesure(Base):
     )
 
     # ── Foreign keys ─────────────────────────────────────────────────────────
-    cni: str = Column(
-        String(9),
-        ForeignKey("users.cni", ondelete="RESTRICT"),
+    user_id: uuid.UUID = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
-        comment="CNI of the client who owns this report.",
+        comment="UUID of the client who owns this report.",
     )
     adjustment_id: uuid.UUID = Column(
         UUID(as_uuid=True),
@@ -122,5 +122,5 @@ class RapportMesure(Base):
     def __repr__(self) -> str:  # pragma: no cover
         return (
             f"<RapportMesure id={self.id_report!r} "
-            f"cni={self.cni!r} verdict={self.verdict!r}>"
+            f"user_id={self.user_id!r} verdict={self.verdict!r}>"
         )

@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS rapport_mesure (
     id_report             UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
 
     -- Foreign keys to upstream entities (RESTRICT prevents orphaned reports)
-    cni                   VARCHAR(9)    NOT NULL
-                          REFERENCES users(cni)                      ON DELETE RESTRICT,
+    user_id               UUID          NOT NULL
+                          REFERENCES users(id)                       ON DELETE RESTRICT,
     adjustment_id         UUID          NOT NULL
                           REFERENCES measurement_adjustments(id)     ON DELETE RESTRICT,
     fabric_id             UUID          NOT NULL
@@ -46,18 +46,18 @@ COMMENT ON TABLE rapport_mesure IS
 -- ── Indexes ───────────────────────────────────────────────────────────────────
 
 -- Efficient client history queries (Req 6 AC1)
-CREATE INDEX IF NOT EXISTS idx_rapport_mesure_cni_generated
-    ON rapport_mesure (cni, generated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rapport_mesure_user_id_generated
+    ON rapport_mesure (user_id, generated_at DESC);
 
 -- ── Row-Level Security ────────────────────────────────────────────────────────
--- SELECT policy scoped to the current user's CNI (set by Module 1 middleware).
+-- SELECT policy scoped to the current user's ID (set by Module 1 middleware).
 -- No UPDATE or DELETE policies — immutability enforced at DB level (NFR-03).
 
 ALTER TABLE rapport_mesure ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY rapport_select_owner ON rapport_mesure
     FOR SELECT
-    USING (cni = current_setting('app.current_user_cni', true));
+    USING (user_id = current_setting('app.current_user_id', true));
 
 -- Admins and tailors query through the application layer which bypasses RLS
 -- by using service_role credentials; client-facing reads use this policy.

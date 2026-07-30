@@ -26,12 +26,12 @@ from hypothesis import given, settings
 
 
 async def override_get_caller(request: Request) -> tuple[str, str]:
-    cni = request.headers.get("x-user-cni")
+    user_id = request.headers.get("x-user-id")
     role = request.headers.get("x-user-role")
-    if not cni or not role:
+    if not user_id or not role:
         from fastapi import HTTPException
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return cni, role
+    return user_id, role
 from hypothesis import strategies as st
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -52,9 +52,9 @@ app.include_router(report_router, prefix="/api/v1")
 SQLITE_URL = "sqlite+aiosqlite:///:memory:"
 
 # Fixed IDs used across tests
-_CLIENT_CNI   = "TST777001"
-_CLIENT2_CNI  = "TST777002"
-_TAILOR_CNI   = "TST777003"
+_CLIENT_USER_ID   = "11111111-1111-1111-1111-111111111111"
+_CLIENT2_USER_ID  = "22222222-2222-2222-2222-222222222222"
+_TAILOR_USER_ID   = "33333333-3333-3333-3333-333333333333"
 _FABRIC_ID    = str(uuid.uuid4())
 _MODEL_ID     = str(uuid.uuid4())
 _ADJ_ID       = str(uuid.uuid4())
@@ -81,7 +81,7 @@ async def _create_schema(engine) -> None:
         # Minimal schema — no CHECK constraints for SQLite compatibility
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS users (
-                cni              VARCHAR(9)   NOT NULL PRIMARY KEY,
+                id               VARCHAR(36)  NOT NULL PRIMARY KEY,
                 nom              VARCHAR(100) NOT NULL,
                 email            VARCHAR(255) NOT NULL UNIQUE,
                 mot_de_passe     TEXT         NOT NULL,
@@ -138,7 +138,7 @@ async def _create_schema(engine) -> None:
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS rapport_mesure (
                 id_report             VARCHAR(36)  NOT NULL PRIMARY KEY,
-                cni                   VARCHAR(9)   NOT NULL,
+                user_id               VARCHAR(36)  NOT NULL,
                 adjustment_id         VARCHAR(36)  NOT NULL,
                 fabric_id             VARCHAR(36)  NOT NULL,
                 model_id              VARCHAR(36)  NOT NULL,
@@ -152,12 +152,12 @@ async def _create_schema(engine) -> None:
 
         # Seed upstream entities
         await conn.execute(text("""
-            INSERT OR IGNORE INTO users (cni, nom, email, mot_de_passe, role)
+            INSERT OR IGNORE INTO users (id, nom, email, mot_de_passe, role)
             VALUES
                 (:c1, 'Client 1', 'c1@example.com', 'h', 'Client'),
                 (:c2, 'Client 2', 'c2@example.com', 'h', 'Client'),
                 (:t1, 'Tailor 1', 'tailor@example.com', 'h', 'Tailor')
-        """), {"c1": _CLIENT_CNI, "c2": _CLIENT2_CNI, "t1": _TAILOR_CNI})
+        """), {"c1": _CLIENT_USER_ID, "c2": _CLIENT2_USER_ID, "t1": _TAILOR_USER_ID})
 
         await conn.execute(text(
             "INSERT OR IGNORE INTO fabrics (fabric_id, fabric_name) VALUES (:fid, 'Wax')"
@@ -171,7 +171,7 @@ async def _create_schema(engine) -> None:
         await conn.execute(text("""
             INSERT OR IGNORE INTO capture_sessions (id, user_id, status)
             VALUES (:sid, :uid, 'success')
-        """), {"sid": sess_id, "uid": _CLIENT_CNI})
+        """), {"sid": sess_id, "uid": _CLIENT_USER_ID})
 
         await conn.execute(text("""
             INSERT OR IGNORE INTO measurement_adjustments
@@ -238,12 +238,12 @@ def report_db():
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _valid_event(
-    cni=None, adj_id=None, fabric_id=None, model_id=None, verdict="compatible"
+    user_id=None, adj_id=None, fabric_id=None, model_id=None, verdict="compatible"
 ) -> dict:
     return {
         "type": "compatibility.evaluated",
         "emitted_at": datetime.now(timezone.utc).isoformat(),
-        "cni":           cni or _CLIENT_CNI,
+        "user_id":       user_id or _CLIENT_USER_ID,
         "adjustment_id": adj_id or _ADJ_ID,
         "fabric_id":     fabric_id or _FABRIC_ID,
         "model_id":      model_id or _MODEL_ID,
@@ -252,12 +252,12 @@ def _valid_event(
     }
 
 
-def _headers(cni: str, role: str) -> dict:
-    return {"x-user-cni": cni, "x-user-role": role}
+def _headers(user_id: str, role: str) -> dict:
+    return {"x-user-id": user_id, "x-user-role": role}
 
 
 async def _insert_report(
-    cni=_CLIENT_CNI,
+    user_id=_CLIENT_USER_ID,
     adj_id=None,
     verdict="compatible",
     generated_at: datetime | None = None,
@@ -273,11 +273,11 @@ async def _insert_report(
     async with _SM() as s:
         await s.execute(text("""
             INSERT INTO rapport_mesure
-                (id_report, cni, adjustment_id, fabric_id, model_id,
+                (id_report, user_id, adjustment_id, fabric_id, model_id,
                  verdict, adjusted_measurements, advice, generated_at)
-            VALUES (:rid, :cni, :aid, :fid, :mid, :v, :snap, 'Advice', :ts)
+            VALUES (:rid, :user_id, :aid, :fid, :mid, :v, :snap, 'Advice', :ts)
         """), {
-            "rid": report_id, "cni": cni, "aid": adj_id or _ADJ_ID,
+            "rid": report_id, "user_id": user_id, "aid": adj_id or _ADJ_ID,
             "fid": _FABRIC_ID, "mid": _MODEL_ID,
             "v": verdict, "snap": snapshot, "ts": ts,
         })
@@ -291,9 +291,9 @@ async def _insert_report(
 
 def test_get_report_client_owner_returns_200():
     """Client retrieves own report → HTTP 200 with display_hints. Req 5 AC1"""
-    report_id = _run(_insert_report(_CLIENT_CNI))
+    report_id = _run(_insert_report(_CLIENT_USER_ID))
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get(f"/api/v1/reports/{report_id}", headers=_headers(_CLIENT_CNI, "Client"))
+        r = c.get(f"/api/v1/reports/{report_id}", headers=_headers(_CLIENT_USER_ID, "Client"))
     assert r.status_code == 200, r.text
     body = r.json()
     assert "display_hints" in body
@@ -303,30 +303,30 @@ def test_get_report_client_owner_returns_200():
 
 def test_get_report_client_other_returns_403():
     """Client retrieves another client's report → HTTP 403. Req 5 AC3"""
-    report_id = _run(_insert_report(_CLIENT_CNI))
+    report_id = _run(_insert_report(_CLIENT_USER_ID))
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get(f"/api/v1/reports/{report_id}", headers=_headers(_CLIENT2_CNI, "Client"))
+        r = c.get(f"/api/v1/reports/{report_id}", headers=_headers(_CLIENT2_USER_ID, "Client"))
     assert r.status_code == 403, r.text
 
 
 def test_get_report_tailor_any_returns_200():
     """Tailor retrieves any report → HTTP 200. Req 5 AC4"""
-    report_id = _run(_insert_report(_CLIENT_CNI))
+    report_id = _run(_insert_report(_CLIENT_USER_ID))
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get(f"/api/v1/reports/{report_id}", headers=_headers(_TAILOR_CNI, "Tailor"))
+        r = c.get(f"/api/v1/reports/{report_id}", headers=_headers(_TAILOR_USER_ID, "Tailor"))
     assert r.status_code == 200, r.text
 
 
 def test_get_report_not_found_returns_404():
     """Non-existent report_id → HTTP 404. Req 5 AC2"""
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get(f"/api/v1/reports/{uuid.uuid4()}", headers=_headers(_CLIENT_CNI, "Client"))
+        r = c.get(f"/api/v1/reports/{uuid.uuid4()}", headers=_headers(_CLIENT_USER_ID, "Client"))
     assert r.status_code == 404, r.text
 
 
 def test_get_report_no_jwt_returns_401():
     """No authentication headers → HTTP 401. Req 5 AC5"""
-    report_id = _run(_insert_report(_CLIENT_CNI))
+    report_id = _run(_insert_report(_CLIENT_USER_ID))
     with TestClient(app, raise_server_exceptions=False) as c:
         r = c.get(f"/api/v1/reports/{report_id}")
     assert r.status_code == 401, r.text
@@ -338,12 +338,12 @@ def test_get_report_no_jwt_returns_401():
 
 def test_list_my_reports_returns_all_ordered():
     """Client with 3 reports → HTTP 200, list of 3. Req 6 AC1"""
-    unique_cni = "LST888001"
-    _run(_create_extra_user(unique_cni))
+    unique_user_id = str(uuid.uuid4())
+    _run(_create_extra_user(unique_user_id))
     for _ in range(3):
-        _run(_insert_report(unique_cni))
+        _run(_insert_report(unique_user_id))
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get("/api/v1/reports/me", headers=_headers(unique_cni, "Client"))
+        r = c.get("/api/v1/reports/me", headers=_headers(unique_user_id, "Client"))
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["total"] == 3
@@ -352,10 +352,10 @@ def test_list_my_reports_returns_all_ordered():
 
 def test_list_my_reports_empty_returns_200():
     """Client with no reports → HTTP 200, empty list. Req 6 AC2"""
-    unique_cni = "LST888002"
-    _run(_create_extra_user(unique_cni))
+    unique_user_id = str(uuid.uuid4())
+    _run(_create_extra_user(unique_user_id))
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get("/api/v1/reports/me", headers=_headers(unique_cni, "Client"))
+        r = c.get("/api/v1/reports/me", headers=_headers(unique_user_id, "Client"))
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["total"] == 0
@@ -365,20 +365,20 @@ def test_list_my_reports_empty_returns_200():
 def test_list_my_reports_tailor_returns_403():
     """Tailor calling /reports/me → HTTP 403. Req 6 AC4"""
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get("/api/v1/reports/me", headers=_headers(_TAILOR_CNI, "Tailor"))
+        r = c.get("/api/v1/reports/me", headers=_headers(_TAILOR_USER_ID, "Tailor"))
     assert r.status_code == 403, r.text
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Task 30: GET /reports/client/{cni}
+# Task 30: GET /reports/client/{user_id}
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_tailor_list_client_reports_returns_200():
     """Tailor retrieves client's reports → HTTP 200. Req 7 AC1"""
-    _run(_insert_report(_CLIENT_CNI))
+    _run(_insert_report(_CLIENT_USER_ID))
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get(f"/api/v1/reports/client/{_CLIENT_CNI}",
-                  headers=_headers(_TAILOR_CNI, "Tailor"))
+        r = c.get(f"/api/v1/reports/client/{_CLIENT_USER_ID}",
+                  headers=_headers(_TAILOR_USER_ID, "Tailor"))
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["total"] >= 1
@@ -386,28 +386,28 @@ def test_tailor_list_client_reports_returns_200():
 
 def test_tailor_list_client_no_reports_returns_200():
     """Tailor retrieves existing client with no reports → HTTP 200, total=0. Req 7 AC2"""
-    unique_cni = "LST888003"
-    _run(_create_extra_user(unique_cni))
+    unique_user_id = str(uuid.uuid4())
+    _run(_create_extra_user(unique_user_id))
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get(f"/api/v1/reports/client/{unique_cni}",
-                  headers=_headers(_TAILOR_CNI, "Tailor"))
+        r = c.get(f"/api/v1/reports/client/{unique_user_id}",
+                  headers=_headers(_TAILOR_USER_ID, "Tailor"))
     assert r.status_code == 200, r.text
     assert r.json()["total"] == 0
 
 
 def test_client_list_other_client_returns_403():
-    """Client calling /reports/client/{cni} → HTTP 403. Req 7 AC3"""
+    """Client calling /reports/client/{user_id} → HTTP 403. Req 7 AC3"""
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get(f"/api/v1/reports/client/{_CLIENT_CNI}",
-                  headers=_headers(_CLIENT2_CNI, "Client"))
+        r = c.get(f"/api/v1/reports/client/{_CLIENT_USER_ID}",
+                  headers=_headers(_CLIENT2_USER_ID, "Client"))
     assert r.status_code == 403, r.text
 
 
-def test_tailor_unknown_cni_returns_404():
-    """Tailor queries non-existent CNI → HTTP 404. Req 7 AC4"""
+def test_tailor_unknown_user_id_returns_404():
+    """Tailor queries non-existent user_id → HTTP 404. Req 7 AC4"""
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.get("/api/v1/reports/client/ZZZ999999",
-                  headers=_headers(_TAILOR_CNI, "Tailor"))
+        r = c.get(f"/api/v1/reports/client/{uuid.uuid4()}",
+                  headers=_headers(_TAILOR_USER_ID, "Tailor"))
     assert r.status_code == 404, r.text
 
 
@@ -439,8 +439,8 @@ def test_event_handler_happy_path_creates_report():
 
         async with _SM() as s:
             result = await s.execute(
-                text("SELECT * FROM rapport_mesure WHERE cni = :cni ORDER BY generated_at DESC"),
-                {"cni": _CLIENT_CNI},
+                text("SELECT * FROM rapport_mesure WHERE user_id = :uid ORDER BY generated_at DESC"),
+                {"uid": _CLIENT_USER_ID},
             )
             return result.fetchall()
 
@@ -482,7 +482,7 @@ def test_handler_negative_measurement_no_row():
             await s.execute(text("""
                 INSERT OR IGNORE INTO capture_sessions (id, user_id, status)
                 VALUES (:sid, :uid, 'success')
-            """), {"sid": sess_id, "uid": _CLIENT_CNI})
+            """), {"sid": sess_id, "uid": _CLIENT_USER_ID})
             await s.execute(text("""
                 INSERT INTO measurement_adjustments
                     (id, session_id, fabric_id,
@@ -543,20 +543,20 @@ def test_two_events_create_two_distinct_rows():
     Emitting the same compatibility.evaluated payload twice creates two
     distinct RapportMesure rows (always INSERT, never UPSERT). Req 8 AC2
     """
-    unique_cni = "IMM999001"
+    unique_user_id = str(uuid.uuid4())
     unique_adj = str(uuid.uuid4())
 
     async def setup():
         sess_id = str(uuid.uuid4())
         async with _SM() as s:
             await s.execute(text("""
-                INSERT OR IGNORE INTO users (cni, nom, email, mot_de_passe, role)
-                VALUES (:cni, 'Immutable', 'imm@example.com', 'h', 'Client')
-            """), {"cni": unique_cni})
+                INSERT OR IGNORE INTO users (id, nom, email, mot_de_passe, role)
+                VALUES (:uid, 'Immutable', :email, 'h', 'Client')
+            """), {"uid": unique_user_id, "email": f"{unique_user_id}@test.com"})
             await s.execute(text("""
                 INSERT OR IGNORE INTO capture_sessions (id, user_id, status)
                 VALUES (:sid, :uid, 'success')
-            """), {"sid": sess_id, "uid": unique_cni})
+            """), {"sid": sess_id, "uid": unique_user_id})
             await s.execute(text("""
                 INSERT INTO measurement_adjustments
                     (id, session_id, fabric_id,
@@ -569,7 +569,7 @@ def test_two_events_create_two_distinct_rows():
             await s.commit()
 
     _run(setup())
-    event = _valid_event(cni=unique_cni, adj_id=unique_adj)
+    event = _valid_event(user_id=unique_user_id, adj_id=unique_adj)
 
     async def run():
         handler = make_compatibility_evaluated_handler(_SM)
@@ -577,8 +577,8 @@ def test_two_events_create_two_distinct_rows():
         await handler(event)  # second delivery
         async with _SM() as s:
             result = await s.execute(
-                text("SELECT id_report FROM rapport_mesure WHERE cni = :cni"),
-                {"cni": unique_cni},
+                text("SELECT id_report FROM rapport_mesure WHERE user_id = :uid"),
+                {"uid": unique_user_id},
             )
             return result.fetchall()
 
@@ -604,18 +604,18 @@ def test_report_list_ordering_invariant(dates: list[datetime]) -> None:
     list_reports_for_client() returns them in non-increasing generated_at order.
     Design §Correctness Property 6 · Req 6 AC1
     """
-    unique_cni = f"ORD{abs(hash(str(dates)))%100000:05d}"[:9]
+    unique_user_id = str(uuid.uuid4())
 
     async def run():
         import json
         async with _SM() as s:
             await s.execute(text("""
-                INSERT OR IGNORE INTO users (cni, nom, email, mot_de_passe, role)
-                VALUES (:cni, 'Order Test', :email, 'h', 'Client')
-            """), {"cni": unique_cni, "email": f"{unique_cni}@test.com"})
+                INSERT OR IGNORE INTO users (id, nom, email, mot_de_passe, role)
+                VALUES (:uid, 'Order Test', :email, 'h', 'Client')
+            """), {"uid": unique_user_id, "email": f"{unique_user_id}@test.com"})
             await s.execute(
-                text("DELETE FROM rapport_mesure WHERE cni = :cni"),
-                {"cni": unique_cni},
+                text("DELETE FROM rapport_mesure WHERE user_id = :uid"),
+                {"uid": unique_user_id},
             )
             snap = json.dumps({
                 "adjusted_bust_cm": 90.0, "adjusted_waist_cm": 70.0,
@@ -626,12 +626,12 @@ def test_report_list_ordering_invariant(dates: list[datetime]) -> None:
                 ts = dt.strftime("%Y-%m-%d %H:%M:%S")
                 await s.execute(text("""
                     INSERT INTO rapport_mesure
-                        (id_report, cni, adjustment_id, fabric_id, model_id,
+                        (id_report, user_id, adjustment_id, fabric_id, model_id,
                          verdict, adjusted_measurements, advice, generated_at)
-                    VALUES (:rid, :cni, :aid, :fid, :mid,
+                    VALUES (:rid, :uid, :aid, :fid, :mid,
                             'compatible', :snap, 'Test', :ts)
                 """), {
-                    "rid": str(uuid.uuid4()), "cni": unique_cni,
+                    "rid": str(uuid.uuid4()), "uid": unique_user_id,
                     "aid": _ADJ_ID, "fid": _FABRIC_ID, "mid": _MODEL_ID,
                     "snap": snap, "ts": ts,
                 })
@@ -639,7 +639,7 @@ def test_report_list_ordering_invariant(dates: list[datetime]) -> None:
 
         service = ReportService()
         async with _SM() as s:
-            reports = await service.list_reports_for_client(unique_cni, s)
+            reports = await service.list_reports_for_client(unique_user_id, s)
             return reports
 
     reports = _run(run())
@@ -653,10 +653,10 @@ def test_report_list_ordering_invariant(dates: list[datetime]) -> None:
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
-async def _create_extra_user(cni: str) -> None:
+async def _create_extra_user(user_id: str) -> None:
     async with _SM() as s:
         await s.execute(text("""
-            INSERT OR IGNORE INTO users (cni, nom, email, mot_de_passe, role)
-            VALUES (:cni, :nom, :email, 'h', 'Client')
-        """), {"cni": cni, "nom": f"User {cni}", "email": f"{cni}@test.com"})
+            INSERT OR IGNORE INTO users (id, nom, email, mot_de_passe, role)
+            VALUES (:uid, :nom, :email, 'h', 'Client')
+        """), {"uid": user_id, "nom": f"User {user_id}", "email": f"{user_id}@test.com"})
         await s.commit()

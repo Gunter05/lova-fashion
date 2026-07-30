@@ -27,10 +27,8 @@ from app.db.session import AsyncSessionLocal as AsyncSessionFactory
 # Constants
 # ---------------------------------------------------------------------------
 
-# Supabase signs its JWTs with the project JWT secret.
-# Set SUPABASE_JWT_SECRET in .env (copy from Supabase dashboard →
-# Project Settings → API → JWT Secret).
-_JWT_SECRET: str = os.environ.get("SUPABASE_JWT_SECRET", "")
+# Custom JWT flow uses JWT_SECRET
+_JWT_SECRET: str = os.environ.get("JWT_SECRET", "dev-secret-change-me-32-chars-min!")
 _JWT_ALGORITHM: str = "HS256"
 
 # FastAPI HTTP Bearer scheme — extracts the Bearer token from the
@@ -75,15 +73,6 @@ async def get_current_user(
     """
     token = credentials.credentials
 
-    if not _JWT_SECRET:
-        # Fail loudly at runtime if the secret was not configured
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                "SUPABASE_JWT_SECRET n'est pas configuré. "
-                "Contactez l'administrateur."
-            ),
-        )
 
     try:
         payload = jwt.decode(

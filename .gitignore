@@ -22,3 +22,9 @@ build/
 
 #environnement virtuel
 .venv/
+
+# Hypothesis and Pytest Cache
+.hypothesis/
+.pytest_cache/
+backend/.hypothesis/
+backend/.pytest_cache/

@@ -1,4 +1,0 @@
-# file: C:\Users\Gunter_2\Desktop\work\lova-fashion\backend\app\modules\business_rules\models.py
-# hypothesis_version: 6.158.1
-
-[200, 'CASCADE', 'RiskZone', 'VerdictEvaluation', 'all, delete-orphan', 'capture_sessions.id', 'ck_morphology_score', 'ck_risk_zone_verdict', 'ck_rule_severity', 'compatibility_rules', 'cut_type', 'ease_rules', 'evaluation', 'fabric_id', 'fabric_property', 'fk_risk_zone_zone', 'is_active', 'model.model_id', 'model_morphology', 'risk_zones', 'rule', 'selectin', 'session_id', 'verdict_evaluations', 'zone_id']
