@@ -28,10 +28,14 @@ export default function LoginPage() {
       auth.login(profileRes.data, access_token);
       navigate('/');
     } catch (err) {
+      const detail = err?.response?.data?.detail;
+      // The backend wraps errors in {error, field, message} inside `detail`
       const message =
-        err?.response?.data?.detail ||
-        err?.response?.data?.message ||
-        'Identifiants incorrects. Veuillez réessayer.';
+        (typeof detail === 'object' && detail?.message)
+          ? detail.message
+          : (typeof detail === 'string' ? detail : null)
+          ?? err?.response?.data?.message
+          ?? 'Identifiants incorrects. Veuillez réessayer.';
       setError(message);
     } finally {
       setLoading(false);
