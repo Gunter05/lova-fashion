@@ -260,7 +260,8 @@ async def test_m13_status_failed_retry_allowed(client, db_session):
     session = await db_session.get(CaptureSession, uuid.UUID(sid))
     session.status = "failed"
     session.failure_reason = "Corps non détecté."
-    await db_session.commit()
+    await db_session.flush()
+    await db_session.refresh(session)
 
     resp = client.get(f"/api/v1/measurements/sessions/{sid}/status")
     assert resp.status_code == 200
@@ -299,7 +300,8 @@ async def test_m14_status_success_includes_measurements(client, db_session):
         silhouette_code="HOURGLASS",
     )
     db_session.add(rm)
-    await db_session.commit()
+    await db_session.flush()
+    await db_session.refresh(session)
 
     resp = client.get(f"/api/v1/measurements/sessions/{sid}/status")
     assert resp.status_code == 200
