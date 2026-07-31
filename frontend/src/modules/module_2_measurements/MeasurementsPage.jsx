@@ -396,27 +396,40 @@ function PhotoSlot({ label, hasPhoto, uploading, onCapture }) {
 
 /**
  * Modal that offers the user two options per photo view:
- *   1. Take a photo with the camera (via <input capture="environment">)
- *   2. Upload an existing file from their device
+ *   1. Take a photo with the camera  — <label> wrapping <input capture="environment">
+ *   2. Upload an existing file       — <label> wrapping a plain <input type="file">
+ *
+ * Using <label> as the clickable element (instead of a <button> calling .click())
+ * is the only cross-browser/cross-platform reliable way to trigger `capture`.
+ * Calling .click() programmatically on a hidden input ignores the `capture`
+ * attribute on many mobile browsers and falls back to the file picker.
  */
 function CaptureModal({ view, t, onFile, onClose }) {
   const { locale } = useLanguage();
-  const cameraRef = useRef(null);
-  const fileRef   = useRef(null);
 
   const handleChange = (e) => {
     const file = e.target.files?.[0];
-    if (file) onFile(file);
+    if (file) { onFile(file); onClose(); }
     e.target.value = '';
   };
 
   const label = view === 'front' ? t('measurements.frontPhoto') : t('measurements.sidePhoto');
   const isFr  = locale === 'fr';
 
+  // Unique IDs so each modal instance has distinct label targets
+  const cameraId = `capture-camera-${view}`;
+  const fileId   = `capture-file-${view}`;
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-        {/* Handle */}
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Bottom-sheet handle (mobile) */}
         <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto sm:hidden" />
 
         <h3 className="text-base font-bold text-gray-900 text-center">{label}</h3>
@@ -424,10 +437,19 @@ function CaptureModal({ view, t, onFile, onClose }) {
           {isFr ? 'Comment souhaitez-vous ajouter cette photo ?' : 'How would you like to add this photo?'}
         </p>
 
-        {/* Option 1 — Camera */}
-        <button
-          onClick={() => cameraRef.current?.click()}
-          className="w-full flex items-center gap-4 p-4 rounded-2xl border border-[#F0EDE8] bg-[#FDFBF7] hover:border-[#D95D39]/40 transition">
+        {/* ── Option 1 : Camera ─────────────────────────────────────────── */}
+        {/*
+          The <input> is visually hidden but NOT display:none — browsers on iOS
+          and Android only honour `capture` when the input is accessible in the
+          DOM. position:absolute + opacity:0 + pointer-events:none keeps it
+          reachable by the <label> without showing it.
+          The <label htmlFor> click bubbles directly to the input, so the
+          browser opens the native camera UI straight away.
+        */}
+        <label
+          htmlFor={cameraId}
+          className="w-full flex items-center gap-4 p-4 rounded-2xl border border-[#F0EDE8] bg-[#FDFBF7] hover:border-[#D95D39]/40 transition cursor-pointer"
+        >
           <div className="w-10 h-10 rounded-full bg-[#D95D39]/10 flex items-center justify-center text-xl">📸</div>
           <div className="text-left">
             <p className="text-sm font-semibold text-gray-800">
@@ -437,21 +459,28 @@ function CaptureModal({ view, t, onFile, onClose }) {
               {isFr ? 'Utiliser directement la caméra' : 'Use your camera directly'}
             </p>
           </div>
-        </button>
-        {/* hidden camera input */}
-        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleChange} />
+        </label>
+        <input
+          id={cameraId}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleChange}
+          style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+        />
 
         {/* Divider */}
-        <div className="flex items-center gap-2 text-gray-300">
+        <div className="flex items-center gap-2">
           <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs">{t('common.or')}</span>
+          <span className="text-xs text-gray-300">{t('common.or')}</span>
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        {/* Option 2 — File upload */}
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="w-full flex items-center gap-4 p-4 rounded-2xl border border-[#F0EDE8] bg-[#FDFBF7] hover:border-[#D95D39]/40 transition">
+        {/* ── Option 2 : Gallery / file picker ─────────────────────────── */}
+        <label
+          htmlFor={fileId}
+          className="w-full flex items-center gap-4 p-4 rounded-2xl border border-[#F0EDE8] bg-[#FDFBF7] hover:border-[#D95D39]/40 transition cursor-pointer"
+        >
           <div className="w-10 h-10 rounded-full bg-[#4E6E58]/10 flex items-center justify-center text-xl">🖼️</div>
           <div className="text-left">
             <p className="text-sm font-semibold text-gray-800">
@@ -461,12 +490,20 @@ function CaptureModal({ view, t, onFile, onClose }) {
               {isFr ? 'Choisir depuis la galerie' : 'Choose from your gallery'}
             </p>
           </div>
-        </button>
-        {/* hidden file input */}
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={handleChange} />
+        </label>
+        <input
+          id={fileId}
+          type="file"
+          accept="image/*"
+          onChange={handleChange}
+          style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+        />
 
         {/* Cancel */}
-        <button onClick={onClose} className="w-full py-3 rounded-2xl text-sm font-medium text-gray-400 bg-[#F5F0EA]">
+        <button
+          onClick={onClose}
+          className="w-full py-3 rounded-2xl text-sm font-medium text-gray-400 bg-[#F5F0EA]"
+        >
           {t('common.close')}
         </button>
       </div>
