@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listFabrics, listCategories, selectFabric, listModels, getModel } from '../../api/modules';
+import { listFabrics, listCategories, getFabric, selectFabric, listModels, getModel } from '../../api/modules';
 import { useFlow } from '../../context/FlowContext';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -19,9 +19,11 @@ export default function CatalogPage() {
   const [categories, setCategories] = useState([]);
   const [catFilter,  setCatFilter]  = useState('');
   const [fabSearch,  setFabSearch]  = useState('');
-  const [selFabric,  setSelFabric]  = useState(null);
-  const [selecting,  setSelecting]  = useState(false);
-  const [fabLoad,    setFabLoad]    = useState(true);
+  const [selFabric,     setSelFabric]     = useState(null);
+  const [selFabricDet,  setSelFabricDet]  = useState(null);
+  const [fabDetLoad,    setFabDetLoad]    = useState(false);
+  const [selecting,     setSelecting]     = useState(false);
+  const [fabLoad,       setFabLoad]       = useState(true);
 
   // ── Model state ──
   const [models,      setModels]      = useState([]);
@@ -83,8 +85,16 @@ export default function CatalogPage() {
     } finally { setSelecting(false); }
   };
 
-  const openModelDetail = async (model) => {
-    setSelModel(model); setSelModelDet(null); setModDetLoad(true);
+  const openFabricDetail = async (fabric) => {
+    setSelFabric(fabric); setSelFabricDet(null); setFabDetLoad(true);
+    try {
+      const res = await getFabric(fabric.fabric_id);
+      setSelFabricDet(res.data);
+    } catch { setError('Impossible de charger les détails du tissu.'); }
+    finally { setFabDetLoad(false); }
+  };
+
+  const openModelDetail = async (model) => {    setSelModel(model); setSelModelDet(null); setModDetLoad(true);
     try {
       const res = await getModel(model.model_id);
       setSelModelDet(res.data);
@@ -191,12 +201,12 @@ export default function CatalogPage() {
             ? <p className="text-center text-sm text-gray-400 py-8">{t('catalog.noFabricFound')}</p>
             : <div className="grid grid-cols-2 gap-3">
                 {visibleFabrics.map((f) => (
-                  <FabricCard key={f.fabric_id} fabric={f} onSelect={handleSelectFabric} selecting={selecting} onClick={() => setSelFabric(f)} t={t} />
+                  <FabricCard key={f.fabric_id} fabric={f} onSelect={handleSelectFabric} selecting={selecting} onClick={() => openFabricDetail(f)} />
                 ))}
               </div>
           }
           {selFabric && (
-            <FabricDetail fabric={selFabric} onClose={() => setSelFabric(null)} onSelect={handleSelectFabric} selecting={selecting} t={t} locale={locale} />
+            <FabricDetail fabric={selFabric} detail={selFabricDet} loading={fabDetLoad} onClose={() => { setSelFabric(null); setSelFabricDet(null); }} onSelect={handleSelectFabric} selecting={selecting} />
           )}
         </>
       )}
@@ -277,36 +287,41 @@ function FabricCard({ fabric, onSelect, selecting, onClick, t }) {
   );
 }
 
-function FabricDetail({ fabric, onClose, onSelect, selecting, t, locale }) {
-  const imgSrc = fabric.fabric_photo || FALLBACK_IMG;
+function FabricDetail({ fabric, detail, loading, onClose, onSelect, selecting }) {
+  const data = detail || fabric;   // fallback sur les données de liste si l'appel est encore en cours
+  const imgSrc = data.fabric_photo || FALLBACK_IMG;
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto sm:hidden" />
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-gray-900">{fabric.fabric_name}</h3>
+          <h3 className="text-lg font-bold text-gray-900">{data.fabric_name}</h3>
           <button onClick={onClose} className="text-gray-300 hover:text-gray-500 text-2xl font-light">×</button>
         </div>
-        <img src={imgSrc} alt={fabric.fabric_name} className="w-full h-44 object-cover rounded-2xl"
+        <img src={imgSrc} alt={data.fabric_name} className="w-full h-44 object-cover rounded-2xl"
           onError={(e) => { e.currentTarget.src = FALLBACK_IMG; }} />
-        <p className="text-sm text-gray-600 leading-relaxed">
-          {fabric.fabric_composition
-            ? (locale === 'en' ? `Soft and bright fabric with a beautiful fluid drape. Composition ${fabric.fabric_composition.toLowerCase()}.` : `Tissu doux et lumineux avec un beau tombé fluide. Composition ${fabric.fabric_composition.toLowerCase()}.`)
-            : (locale === 'en' ? 'High quality fabric.' : 'Tissu de haute qualité.')}
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            [t('catalog.fabricDetail.composition'), fabric.fabric_composition ?? '—'],
-            [t('catalog.fabricDetail.elasticity'),  fabric.fabric_elasticity_rate != null ? `${fabric.fabric_elasticity_rate}%` : '—'],
-            [t('catalog.fabricDetail.weight'),       fabric.fabric_weight ? `${fabric.fabric_weight} g/m²` : '—'],
-            [t('catalog.fabricDetail.price'),        `${fabric.fabric_unit_price?.toLocaleString('fr-FR')} FCFA/m`],
-          ].map(([label, val]) => (
-            <div key={label} className="bg-[#FDFBF7] rounded-2xl p-3">
-              <p className="text-xs text-gray-400">{label}</p>
-              <p className="text-sm font-semibold text-gray-800 mt-0.5">{val}</p>
+        {loading ? <Spinner /> : (
+          <>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {data.fabric_composition
+                ? `Tissu de qualité avec un beau tombé. Composition : ${data.fabric_composition}.`
+                : 'Tissu de haute qualité.'}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ['Composition', data.fabric_composition ?? '—'],
+                ['Élasticité',  data.fabric_elasticity_rate != null ? `${data.fabric_elasticity_rate} %` : '—'],
+                ['Poids',       data.fabric_weight ? `${data.fabric_weight} g/m²` : '—'],
+                ['Prix',        `${data.fabric_unit_price?.toLocaleString('fr-FR')} FCFA/m`],
+              ].map(([label, val]) => (
+                <div key={label} className="bg-[#FDFBF7] rounded-2xl p-3">
+                  <p className="text-xs text-gray-400">{label}</p>
+                  <p className="text-sm font-semibold text-gray-800 mt-0.5">{val}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
         <button onClick={() => { onSelect(fabric); onClose(); }} disabled={selecting || fabric.fabric_status !== 'available'}
           className="w-full py-3.5 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
           style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}>
