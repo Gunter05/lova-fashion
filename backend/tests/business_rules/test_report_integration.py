@@ -362,11 +362,26 @@ def test_list_my_reports_empty_returns_200():
     assert body["reports"] == []
 
 
-def test_list_my_reports_tailor_returns_403():
-    """Tailor calling /reports/me → HTTP 403. Req 6 AC4"""
+def test_list_my_reports_tailor_returns_empty():
+    """Tailor calling /reports/me → HTTP 200 with empty list."""
     with TestClient(app, raise_server_exceptions=False) as c:
         r = c.get("/api/v1/reports/me", headers=_headers(_TAILOR_USER_ID, "Tailor"))
-    assert r.status_code == 403, r.text
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 0
+    assert body["reports"] == []
+
+
+def test_list_my_reports_admin_returns_all():
+    """Admin calling /reports/me → HTTP 200 with all reports."""
+    # Insert 2 reports for different clients
+    _run(_insert_report(str(uuid.uuid4())))
+    _run(_insert_report(str(uuid.uuid4())))
+    with TestClient(app, raise_server_exceptions=False) as c:
+        r = c.get("/api/v1/reports/me", headers=_headers(str(uuid.uuid4()), "Admin"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] >= 2
 
 
 # ─────────────────────────────────────────────────────────────────────────────

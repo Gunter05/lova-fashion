@@ -97,18 +97,23 @@ async def list_my_reports(
     Return all reports for the authenticated client, ordered newest first.
     Returns `reports=[]` and `total=0` when no reports exist.
 
-    Auth: Client role only (enforced via x-user-role header).
-    Req 6 AC1–4
+    Auth:
+      - Client: returns their own reports.
+      - Admin / administrator: returns all existing reports.
+      - Tailor / catalog_manager: returns an empty list.
     """
     caller_id, caller_role = caller
 
-    if caller_role.lower() != "client":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only clients may access their own report list.",
-        )
+    role_lower = caller_role.lower()
+    if role_lower in ("admin", "administrator"):
+        reports = await _service.list_all_reports(db)
+    elif role_lower in ("tailor", "catalog_manager"):
+        reports = []
+    elif role_lower == "client":
+        reports = await _service.list_reports_for_client(caller_id, db)
+    else:
+        reports = []
 
-    reports = await _service.list_reports_for_client(caller_id, db)
     summaries = ReportService.to_summary_list(reports)
     return ReportListResponse(reports=summaries, total=len(summaries))
 
