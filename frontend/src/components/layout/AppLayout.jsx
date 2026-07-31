@@ -1,6 +1,7 @@
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import BottomNav from './BottomNav';
+import JourneyProgress from '../common/JourneyProgress';
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
@@ -37,8 +38,15 @@ export default function AppLayout() {
       </header>
 
       {/* Page content */}
-      <main className="flex-1 overflow-y-auto px-4 pb-24">
-        <Outlet />
+      <main className="flex-1 overflow-y-auto pb-24">
+        {/* Wizard de progression — visible sur toutes les pages modules */}
+        <div className="px-4 pt-2">
+          <JourneyProgress />
+        </div>
+        {/* Contenu de la page courante */}
+        <div className="px-4 pt-2">
+          <Outlet />
+        </div>
       </main>
 
       {/* Bottom navigation */}

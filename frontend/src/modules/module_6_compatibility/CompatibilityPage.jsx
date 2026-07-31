@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { listSessions, listAdjustments, getAdjustment } from '../../api/modules';
+import { useNavigate } from 'react-router-dom';
+import { listSessions, listAdjustments, listModels, createVerification, getVerification } from '../../api/modules';
+import { useFlow } from '../../context/FlowContext';
 
 const VERDICT_CONFIG = {
   compatible: {
@@ -23,10 +25,19 @@ const VERDICT_CONFIG = {
 };
 
 export default function CompatibilityPage() {
+  const navigate = useNavigate();
+  const { flow, setFlow } = useFlow();
+
   const [sessions,    setSessions]    = useState([]);
   const [adjustments, setAdjustments] = useState([]);
-  const [sessionId,   setSessionId]   = useState('');
-  const [adjId,       setAdjId]       = useState('');
+  const [models,      setModels]      = useState([]);
+
+  // Pré-rempli depuis le FlowContext
+  const [sessionId,   setSessionId]   = useState(flow.sessionId    || '');
+  const [adjId,       setAdjId]       = useState(flow.adjustmentId || '');
+  const [fabricId,    setFabricId]    = useState(flow.fabricId     || '');
+  const [modelId,     setModelId]     = useState(flow.modelId      || '');
+
   const [result,      setResult]      = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [checking,    setChecking]    = useState(false);
@@ -36,15 +47,24 @@ export default function CompatibilityPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await listSessions();
-        setSessions(res.data.sessions?.filter((s) => s.status === 'success') || []);
+        const [sRes, mRes] = await Promise.all([listSessions(), listModels()]);
+        setSessions(sRes.data.sessions?.filter((s) => s.status === 'success') || []);
+        setModels(mRes.data.items || []);
+
+        // Pré-charge les ajustements si session déjà connue
+        if (flow.sessionId) {
+          try {
+            const aRes = await listAdjustments(flow.sessionId);
+            setAdjustments(aRes.data.adjustments || []);
+          } catch { /* pas encore */ }
+        }
       } catch {
-        setError('Impossible de charger les sessions.');
+        setError('Impossible de charger les données.');
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSessionChange = async (id) => {
     setSessionId(id); setAdjId(''); setResult(null); setAdjustments([]);
@@ -53,18 +73,38 @@ export default function CompatibilityPage() {
     try {
       const res = await listAdjustments(id);
       setAdjustments(res.data.adjustments || []);
+      // Pré-sélectionne l'ajustement du flow si disponible
+      if (flow.adjustmentId && (res.data.adjustments || []).some((a) => a.adjustment_id === flow.adjustmentId)) {
+        setAdjId(flow.adjustmentId);
+        // Récupère le fabric_id depuis l'ajustement
+        const a = (res.data.adjustments || []).find((a) => a.adjustment_id === flow.adjustmentId);
+        if (a?.fabric_id) setFabricId(a.fabric_id);
+      }
     } catch { setError('Impossible de charger les ajustements.'); }
     finally { setAdjLoading(false); }
   };
 
   const handleCheck = async () => {
-    if (!adjId) { setError('Sélectionnez un ajustement.'); return; }
+    if (!sessionId || !adjId || !modelId) {
+      setError('Sélectionnez une session, un ajustement et un patron.'); return;
+    }
+
+    // Récupère le fabric_id depuis l'ajustement sélectionné (ou le flow)
+    const adj = adjustments.find((a) => a.adjustment_id === adjId);
+    const usedFabricId = adj?.fabric_id || fabricId || flow.fabricId;
+    if (!usedFabricId) { setError('Impossible de déterminer le tissu. Revenez au catalogue.'); return; }
+
     setChecking(true); setError(''); setResult(null);
     try {
-      const res = await getAdjustment(adjId);
-      setResult(res.data);
+      // Appel correct vers le vrai moteur de compatibilité (Module 6)
+      const res = await createVerification(sessionId, usedFabricId, modelId);
+      const verification = res.data;
+      setResult(verification);
+      // Persiste l'ID de vérification dans le parcours
+      setFlow({ verificationId: verification.verification_id || verification.id });
     } catch (err) {
-      setError(err?.response?.data?.detail?.message || 'Erreur lors de la vérification.');
+      const d = err?.response?.data?.detail;
+      setError(typeof d === 'string' ? d : d?.message || 'Erreur lors de la vérification.');
     } finally { setChecking(false); }
   };
 
@@ -78,6 +118,14 @@ export default function CompatibilityPage() {
           <p className="text-xs text-gray-400 mt-0.5">Vérifiez la compatibilité tissu / patron / morphologie.</p>
         </div>
 
+        {/* Rappel sélections en cours */}
+        {(flow.fabricName || flow.modelName) && (
+          <div className="bg-[#4E6E58]/5 border border-[#4E6E58]/20 rounded-2xl px-4 py-2.5 text-xs text-[#3A5242] space-y-0.5">
+            {flow.fabricName && <p>Tissu : <span className="font-semibold">{flow.fabricName}</span></p>}
+            {flow.modelName  && <p>Patron : <span className="font-semibold">{flow.modelName}</span></p>}
+          </div>
+        )}
+
         {error && (
           <div className="flex items-center justify-between rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
             <span>{error}</span>
@@ -88,11 +136,15 @@ export default function CompatibilityPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5 space-y-4">
           <h2 className="text-sm font-semibold text-gray-700">Sélection</h2>
 
+          {/* Session */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Session de mesures</label>
             {sessions.length === 0 ? (
               <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700">
-                Aucune session validée. Complétez les modules 2 et 5 d&apos;abord.
+                Aucune session validée.{' '}
+                <button className="underline font-semibold" onClick={() => navigate('/modules/2')}>
+                  Compléter les mesures
+                </button>
               </div>
             ) : (
               <select
@@ -110,19 +162,27 @@ export default function CompatibilityPage() {
             )}
           </div>
 
+          {/* Ajustement */}
           {sessionId && (
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Ajustement (tissu)</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Ajustement (tissu + aisance)</label>
               {adjLoading ? (
                 <p className="text-xs text-gray-400 py-2">Chargement…</p>
               ) : adjustments.length === 0 ? (
                 <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700">
-                  Aucun ajustement. Calculez les marges d&apos;aisance d&apos;abord.
+                  Aucun ajustement.{' '}
+                  <button className="underline font-semibold" onClick={() => navigate('/modules/5')}>
+                    Calculer les marges d'aisance
+                  </button>
                 </div>
               ) : (
                 <select
                   value={adjId}
-                  onChange={(e) => setAdjId(e.target.value)}
+                  onChange={(e) => {
+                    setAdjId(e.target.value);
+                    const a = adjustments.find((a) => a.adjustment_id === e.target.value);
+                    if (a?.fabric_id) setFabricId(a.fabric_id);
+                  }}
                   className="w-full rounded-xl border border-[#E8E4DF] px-4 py-3 text-sm bg-white focus:outline-none focus:border-[#D95D39]"
                 >
                   <option value="">Choisir un ajustement…</option>
@@ -136,9 +196,33 @@ export default function CompatibilityPage() {
             </div>
           )}
 
+          {/* Patron */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Patron</label>
+            {models.length === 0 ? (
+              <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700">
+                Aucun patron disponible.{' '}
+                <button className="underline font-semibold" onClick={() => navigate('/modules/3')}>
+                  Choisir un patron
+                </button>
+              </div>
+            ) : (
+              <select
+                value={modelId}
+                onChange={(e) => setModelId(e.target.value)}
+                className="w-full rounded-xl border border-[#E8E4DF] px-4 py-3 text-sm bg-white focus:outline-none focus:border-[#D95D39]"
+              >
+                <option value="">Choisir un patron…</option>
+                {models.map((m) => (
+                  <option key={m.model_id} value={m.model_id}>{m.model_name} — {m.garment_type}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
           <button
             onClick={handleCheck}
-            disabled={checking || !adjId}
+            disabled={checking || !adjId || !modelId}
             className="w-full rounded-2xl py-3.5 text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
             style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
           >
@@ -146,30 +230,23 @@ export default function CompatibilityPage() {
           </button>
         </div>
 
-        {result && <CompatibilityResult adj={result} />}
+        {result && <CompatibilityResult result={result} onContinue={() => navigate('/modules/7')} />}
       </div>
     </div>
   );
 }
 
-function CompatibilityResult({ adj }) {
-  const zones = adj.bust && adj.waist && adj.hips ? [
-    { name: 'Poitrine', ease: adj.bust.ease_cm,  raw: adj.bust.raw_cm,  val: adj.bust.adjusted_cm },
-    { name: 'Taille',   ease: adj.waist.ease_cm, raw: adj.waist.raw_cm, val: adj.waist.adjusted_cm },
-    { name: 'Hanches',  ease: adj.hips.ease_cm,  raw: adj.hips.raw_cm,  val: adj.hips.adjusted_cm },
-  ] : [];
-
-  const hasNegEase  = zones.some((z) => z.ease < 0);
-  const hasLowEase  = zones.some((z) => z.ease < 2 && z.ease >= 0);
-  const verdict     = hasNegEase ? 'incompatible' : hasLowEase ? 'partially_compatible' : 'compatible';
-  const cfg         = VERDICT_CONFIG[verdict];
+function CompatibilityResult({ result, onContinue }) {
+  // Le backend renvoie un verdict direct (compatible / partially_compatible / incompatible)
+  const verdict = result.verdict || 'compatible';
+  const cfg     = VERDICT_CONFIG[verdict] ?? VERDICT_CONFIG.compatible;
 
   return (
     <div className="space-y-4">
       {/* Compatibility gauge card */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5 text-center">
         <p className="text-xs text-gray-400 mb-1">Compatibilité</p>
-        <p className="text-xs text-gray-500 mb-4">{adj.fabric_name}</p>
+        {result.fabric_name && <p className="text-xs text-gray-500 mb-4">{result.fabric_name}</p>}
         <div className="relative w-32 h-32 mx-auto mb-3">
           <svg className="w-32 h-32 -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="42" fill="none" stroke="#F0EDE8" strokeWidth="10" />
@@ -183,58 +260,34 @@ function CompatibilityResult({ adj }) {
         <p className="text-sm font-bold" style={{ color: cfg.gauge }}>
           {verdict === 'compatible' ? 'Excellent choix !' : cfg.label}
         </p>
+        {result.advice && (
+          <p className="text-xs text-gray-400 mt-2 max-w-xs mx-auto">{result.advice}</p>
+        )}
       </div>
 
-      {/* Zone breakdown */}
-      <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5 space-y-3">
-        {zones.map((z) => {
-          const ok  = z.ease >= 2;
-          const low = z.ease < 2 && z.ease >= 0;
-          const neg = z.ease < 0;
-          const iconColor = ok ? '#4E6E58' : low ? '#D97706' : '#EF4444';
-          const labels = {
-            Poitrine: 'Harmonie des matières',
-            Taille:   'Confort & aisance',
-            Hanches:  'Retombée du tissu',
-          };
-          const descs = {
-            Poitrine: ok ? 'Excellente'              : low ? 'Vérifier'           : 'Problème détecté',
-            Taille:   ok ? 'Optimisé automatiquement' : low ? 'Ajustement requis'  : 'Ajustement critique',
-            Hanches:  ok ? 'Parfait pour ce modèle'  : low ? 'Vérifier'           : 'Incompatible',
-          };
-          return (
-            <div key={z.name} className="flex items-center justify-between py-2 border-b border-[#F0EDE8] last:border-0">
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs shrink-0"
-                  style={{ background: iconColor }}
-                >
-                  {ok ? '✓' : low ? '~' : '✕'}
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{labels[z.name] ?? z.name}</p>
-                  <p className="text-xs text-gray-400">{z.raw}+{z.ease} cm</p>
-                </div>
+      {/* Détail zones incompatibles */}
+      {result.incompatible_zones?.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5 space-y-2">
+          <h3 className="text-sm font-semibold text-gray-700">Zones à surveiller</h3>
+          {result.incompatible_zones.map((z, i) => (
+            <div key={i} className="flex gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+              <span className="text-red-400 mt-0.5 shrink-0">⚠</span>
+              <div>
+                <p className="text-sm font-medium text-gray-800">{z.zone_name}</p>
+                {z.reason && <p className="text-xs text-gray-400 mt-0.5">{z.reason}</p>}
               </div>
-              <span className="text-xs font-semibold" style={{ color: iconColor }}>
-                {descs[z.name]}
-              </span>
             </div>
-          );
-        })}
-      </div>
-
-      {adj.data_integrity_warning && (
-        <div className="rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-xs text-amber-700">
-          ⚠️ La session source n&apos;est plus en état de succès.
+          ))}
         </div>
       )}
 
+      {/* Bouton "Continuer" — maintenant fonctionnel */}
       <button
-        className="w-full rounded-2xl py-3.5 text-sm font-bold text-white"
+        onClick={onContinue}
+        className="w-full rounded-2xl py-3.5 text-sm font-bold text-white flex items-center justify-center gap-2"
         style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
       >
-        Continuer vers le récapitulatif →
+        Voir mon récapitulatif →
       </button>
     </div>
   );

@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   createSession, listSessions, getSessionStatus,
-  setStature, triggerProcess,
+  setStature, triggerProcess, uploadPhoto,
 } from '../../api/modules';
+import { useFlow } from '../../context/FlowContext';
 
 const STATUS_CONFIG = {
   empty:      { label: 'Vide',          color: 'bg-gray-100 text-gray-500',      dot: 'bg-gray-400' },
@@ -12,6 +14,9 @@ const STATUS_CONFIG = {
 };
 
 export default function MeasurementsPage() {
+  const navigate = useNavigate();
+  const { setFlow } = useFlow();
+
   const [sessions,   setSessions]   = useState([]);
   const [selected,   setSelected]   = useState(null);
   const [stature,    setStatureVal] = useState('');
@@ -21,6 +26,16 @@ export default function MeasurementsPage() {
   const [polling,    setPolling]    = useState(false);
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState('');
+
+  // Photo upload state
+  const [photoFront,   setPhotoFront]   = useState(null); // File
+  const [photoSide,    setPhotoSide]    = useState(null); // File
+  const [uploadingF,   setUploadingF]   = useState(false);
+  const [uploadingS,   setUploadingS]   = useState(false);
+  const [uploadedF,    setUploadedF]    = useState(false);
+  const [uploadedS,    setUploadedS]    = useState(false);
+  const frontInputRef = useRef(null);
+  const sideInputRef  = useRef(null);
 
   useEffect(() => { loadSessions(); }, []);
 
@@ -46,6 +61,8 @@ export default function MeasurementsPage() {
 
   const handleCreate = async () => {
     setCreating(true); setError('');
+    setUploadedF(false); setUploadedS(false);
+    setPhotoFront(null); setPhotoSide(null);
     try {
       const res = await createSession();
       await loadSessions();
@@ -53,6 +70,23 @@ export default function MeasurementsPage() {
       setSuccess('Nouvelle session créée.');
     } catch { setError('Échec de la création de la session.'); }
     finally { setCreating(false); }
+  };
+
+  const handlePhotoUpload = async (view, file) => {
+    if (!selected?.session_id || !file) return;
+    const setter = view === 'front' ? setUploadingF : setUploadingS;
+    const doneSetter = view === 'front' ? setUploadedF : setUploadedS;
+    setter(true); setError('');
+    try {
+      await uploadPhoto(selected.session_id, view, file);
+      doneSetter(true);
+      setSuccess(`Photo ${view === 'front' ? 'face' : 'profil'} téléversée.`);
+    } catch (err) {
+      const d = err?.response?.data?.detail;
+      setError(typeof d === 'string' ? d : d?.message || `Erreur upload photo ${view}.`);
+    } finally {
+      setter(false);
+    }
   };
 
   const handleProcess = async () => {
@@ -85,6 +119,12 @@ export default function MeasurementsPage() {
     }, 3000);
   };
 
+  const handleContinue = () => {
+    // Enregistre l'ID de session dans le FlowContext avant de naviguer
+    setFlow({ sessionId: selected.session_id });
+    navigate('/modules/3');
+  };
+
   if (loading) return <Spinner />;
   const m = selected?.measurements;
 
@@ -93,12 +133,12 @@ export default function MeasurementsPage() {
       {/* Steps banner */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5">
         <h1 className="text-lg font-bold text-gray-900 mb-1">Mon Atelier de mesures</h1>
-        <p className="text-xs text-gray-400 mb-4">Pour des mesures précises, suivez ces 3 conseils.</p>
+        <p className="text-xs text-gray-400 mb-4">Pour des mesures précises, suivez ces conseils.</p>
         <div className="space-y-3">
           {[
             { icon: '🧍', title: 'Tenez-vous droit', desc: 'Gardez le dos droit et les épaules relâchées.' },
             { icon: '👕', title: 'Portez des vêtements près du corps', desc: 'Évitez les vêtements amples ou épais.' },
-            { icon: '📱', title: "Posez le téléphone au niveau de la taille', desc: 'Demandez à quelqu'un de vous aider. " },
+            { icon: '📱', title: 'Posez le téléphone au niveau de la taille', desc: 'Demandez à quelqu\'un de vous aider.' },
           ].map(({ icon, title, desc }) => (
             <div key={title} className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#FAF8F5] flex items-center justify-center text-lg shrink-0">{icon}</div>
@@ -166,13 +206,93 @@ export default function MeasurementsPage() {
           </div>
 
           {(selected.status === 'empty' || selected.status === 'failed') && (
-            <div className="space-y-3">
-              <p className="text-xs text-gray-500">Téléversez vos deux photos (face &amp; profil), puis renseignez votre stature.</p>
+            <div className="space-y-4">
+              <p className="text-xs text-gray-500">
+                Téléversez vos deux photos (face &amp; profil), puis renseignez votre stature.
+              </p>
+
               {selected.status === 'failed' && selected.failure_reason && (
                 <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">
                   Motif d'échec : {selected.failure_reason}
                 </p>
               )}
+
+              {/* Photo uploads */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Photo face */}
+                <div>
+                  <input
+                    ref={frontInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) { setPhotoFront(f); handlePhotoUpload('front', f); }
+                    }}
+                  />
+                  <button
+                    onClick={() => frontInputRef.current?.click()}
+                    disabled={uploadingF}
+                    className={`w-full rounded-xl border-2 border-dashed py-4 flex flex-col items-center gap-1.5 text-xs font-medium transition ${
+                      uploadedF
+                        ? 'border-[#4E6E58] bg-[#4E6E58]/5 text-[#4E6E58]'
+                        : 'border-[#E8E4DF] text-gray-400 hover:border-[#D95D39] hover:text-[#D95D39]'
+                    }`}
+                  >
+                    {uploadingF ? (
+                      <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    ) : uploadedF ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                      </svg>
+                    )}
+                    {uploadedF ? 'Face ✓' : photoFront ? photoFront.name.slice(0, 12) + '…' : 'Photo face'}
+                  </button>
+                </div>
+
+                {/* Photo profil */}
+                <div>
+                  <input
+                    ref={sideInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) { setPhotoSide(f); handlePhotoUpload('side', f); }
+                    }}
+                  />
+                  <button
+                    onClick={() => sideInputRef.current?.click()}
+                    disabled={uploadingS}
+                    className={`w-full rounded-xl border-2 border-dashed py-4 flex flex-col items-center gap-1.5 text-xs font-medium transition ${
+                      uploadedS
+                        ? 'border-[#4E6E58] bg-[#4E6E58]/5 text-[#4E6E58]'
+                        : 'border-[#E8E4DF] text-gray-400 hover:border-[#D95D39] hover:text-[#D95D39]'
+                    }`}
+                  >
+                    {uploadingS ? (
+                      <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    ) : uploadedS ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                      </svg>
+                    )}
+                    {uploadedS ? 'Profil ✓' : photoSide ? photoSide.name.slice(0, 12) + '…' : 'Photo profil'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Stature + lancer */}
               <div className="flex gap-2 items-end">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-gray-600 mb-1">Stature (cm)</label>
@@ -220,11 +340,13 @@ export default function MeasurementsPage() {
                   </div>
                 ))}
               </div>
+              {/* Bouton "Continuer" — maintenant fonctionnel */}
               <button
-                className="w-full mt-4 rounded-2xl py-3.5 text-sm font-bold text-white"
+                onClick={handleContinue}
+                className="w-full mt-4 rounded-2xl py-3.5 text-sm font-bold text-white flex items-center justify-center gap-2"
                 style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
               >
-                Continuer →
+                Choisir mon tissu et patron →
               </button>
             </div>
           )}

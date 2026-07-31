@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { listFabrics, listCategories, selectFabric, listModels, getModel } from '../../api/modules';
+import { useFlow } from '../../context/FlowContext';
 
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=800';
 
@@ -15,6 +17,8 @@ const TYPE_LABELS = {
 };
 
 export default function CatalogPage() {
+  const navigate = useNavigate();
+  const { flow, setFlow } = useFlow();
   const [activeTab,   setActiveTab]   = useState('TISSUS');
 
   // ── Fabric state ──
@@ -73,7 +77,11 @@ export default function CatalogPage() {
     setSelecting(true); setError(''); setInfo('');
     try {
       await selectFabric(fabric.fabric_id);
-      setInfo(`"${fabric.fabric_name}" sélectionné avec succès.`);
+      // Persiste le tissu dans le parcours utilisateur
+      setFlow({ fabricId: fabric.fabric_id, fabricName: fabric.fabric_name });
+      setInfo(`"${fabric.fabric_name}" sélectionné. Choisissez maintenant votre patron.`);
+      // Bascule sur l'onglet Modèles pour guider l'utilisateur
+      setActiveTab('MODÈLES');
     } catch (err) {
       const data = err?.response?.data;
       setError(err?.response?.status === 409
@@ -91,6 +99,11 @@ export default function CatalogPage() {
     finally { setModDetLoad(false); }
   };
 
+  const handleSelectModel = (model) => {
+    setFlow({ modelId: model.model_id, modelName: model.model_name });
+    setInfo(`Patron "${model.model_name}" sélectionné.`);
+  };
+
   const visibleFabrics = fabrics.filter((f) =>
     f.fabric_name.toLowerCase().includes(fabSearch.toLowerCase())
   );
@@ -106,12 +119,50 @@ export default function CatalogPage() {
           <h1 className="text-lg font-bold text-gray-900">Choisissez votre modèle</h1>
           <p className="text-xs text-gray-400 mt-0.5">et votre tissu</p>
         </div>
-        <button className="w-8 h-8 rounded-full bg-white shadow-sm border border-[#F0EDE8] flex items-center justify-center text-gray-400">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-          </svg>
-        </button>
+        {/* Bouton Continuer — actif dès qu'un tissu ET un patron sont choisis */}
+        {flow.fabricId && flow.modelId ? (
+          <button
+            onClick={() => navigate('/modules/5')}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1"
+            style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
+          >
+            Continuer →
+          </button>
+        ) : (
+          <button className="w-8 h-8 rounded-full bg-white shadow-sm border border-[#F0EDE8] flex items-center justify-center text-gray-400">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            </svg>
+          </button>
+        )}
       </div>
+
+      {/* Bandeau récap sélection en cours */}
+      {(flow.fabricId || flow.modelId) && (
+        <div className="bg-[#4E6E58]/5 border border-[#4E6E58]/20 rounded-2xl px-4 py-3 flex items-center justify-between">
+          <div className="space-y-0.5">
+            {flow.fabricName && (
+              <p className="text-xs text-[#3A5242]">
+                <span className="font-semibold">Tissu :</span> {flow.fabricName}
+              </p>
+            )}
+            {flow.modelName && (
+              <p className="text-xs text-[#3A5242]">
+                <span className="font-semibold">Patron :</span> {flow.modelName}
+              </p>
+            )}
+          </div>
+          {flow.fabricId && flow.modelId && (
+            <button
+              onClick={() => navigate('/modules/5')}
+              className="shrink-0 ml-3 px-3 py-1.5 rounded-xl text-xs font-bold text-white"
+              style={{ background: '#D95D39' }}
+            >
+              Calculer l'aisance →
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-[#F0EDE8] rounded-xl p-1">
@@ -176,7 +227,8 @@ export default function CatalogPage() {
           }
           {selModel && (
             <ModelDetail model={selModel} detail={selModelDet} loading={modDetLoad}
-              onClose={() => { setSelModel(null); setSelModelDet(null); }} />
+              onClose={() => { setSelModel(null); setSelModelDet(null); }}
+              onSelectModel={handleSelectModel} />
           )}
         </>
       )}
@@ -284,7 +336,7 @@ function ModelCard({ model, onClick }) {
   );
 }
 
-function ModelDetail({ model, detail, loading, onClose }) {
+function ModelDetail({ model, detail, loading, onClose, onSelectModel }) {
   const imgSrc = (detail?.photo_url || model.photo_url) || FALLBACK_IMG;
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -325,9 +377,13 @@ function ModelDetail({ model, detail, loading, onClose }) {
             )}
           </>
         ) : null}
-        <button onClick={onClose} className="w-full py-3.5 rounded-2xl text-sm font-bold text-white"
-          style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}>
-          Choisir ce modèle
+        {/* Bouton — persiste le patron et ferme le modal */}
+        <button
+          onClick={() => { onSelectModel(model); onClose(); }}
+          className="w-full py-3.5 rounded-2xl text-sm font-bold text-white"
+          style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
+        >
+          Choisir ce patron ✓
         </button>
       </div>
     </div>

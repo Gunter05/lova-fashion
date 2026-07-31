@@ -1,18 +1,19 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
-import AppLayout        from './components/layout/AppLayout';
-import ProtectedRoute   from './components/common/ProtectedRoute';
+import AppLayout          from './components/layout/AppLayout';
+import ProtectedRoute     from './components/common/ProtectedRoute';
+import SmartHomeRedirect  from './components/common/SmartHomeRedirect';
 
 import LoginPage        from './modules/auth/LoginPage';
 import RegisterPage     from './modules/auth/RegisterPage';
 
-import ProfilePage      from './modules/module_1_profile/ProfilePage';
-import MeasurementsPage from './modules/module_2_measurements/MeasurementsPage';
+import ProfilePage        from './modules/module_1_profile/ProfilePage';
+import MeasurementsPage   from './modules/module_2_measurements/MeasurementsPage';
 import FabricCatalogPage  from './modules/module_3_fabric/FabricCatalogPage';
 import PatternCatalogPage from './modules/module_4_pattern/PatternCatalogPage';
-import EaseMarginsPage  from './modules/module_5_ease/EaseMarginsPage';
+import EaseMarginsPage    from './modules/module_5_ease/EaseMarginsPage';
 import CompatibilityPage  from './modules/module_6_compatibility/CompatibilityPage';
-import ReportPage       from './modules/module_7_report/ReportPage';
+import ReportPage         from './modules/module_7_report/ReportPage';
 
 export default function App() {
   return (
@@ -22,7 +23,8 @@ export default function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route index element={<Navigate to="/modules/7" replace />} />
+          {/* Redirect intelligent : reprend là où l'utilisateur en était */}
+          <Route index element={<SmartHomeRedirect />} />
           <Route path="modules/1" element={<ProfilePage />} />
           <Route path="modules/2" element={<MeasurementsPage />} />
           <Route path="modules/3" element={<FabricCatalogPage />} />

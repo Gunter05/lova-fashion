@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { listSessions, listFabrics, computeAdjustment, listAdjustments } from '../../api/modules';
+import { useFlow } from '../../context/FlowContext';
 
 export default function EaseMarginsPage() {
+  const navigate = useNavigate();
+  const { flow, setFlow } = useFlow();
+
   const [sessions,    setSessions]    = useState([]);
   const [fabrics,     setFabrics]     = useState([]);
   const [adjustments, setAdjustments] = useState([]);
-  const [sessionId,   setSessionId]   = useState('');
-  const [fabricId,    setFabricId]    = useState('');
+  const [sessionId,   setSessionId]   = useState(flow.sessionId || '');
+  const [fabricId,    setFabricId]    = useState(flow.fabricId  || '');
   const [computing,   setComputing]   = useState(false);
   const [loading,     setLoading]     = useState(true);
   const [adjLoading,  setAdjLoading]  = useState(false);
@@ -18,15 +23,26 @@ export default function EaseMarginsPage() {
     (async () => {
       try {
         const [sRes, fRes] = await Promise.all([listSessions(), listFabrics()]);
-        setSessions(sRes.data.sessions?.filter((s) => s.status === 'success') || []);
+        const validSessions = sRes.data.sessions?.filter((s) => s.status === 'success') || [];
+        setSessions(validSessions);
         setFabrics(fRes.data || []);
+
+        // Pré-charge l'historique si la session est déjà connue
+        const preSession = flow.sessionId;
+        if (preSession && validSessions.some((s) => s.session_id === preSession)) {
+          setSessionId(preSession);
+          try {
+            const aRes = await listAdjustments(preSession);
+            setAdjustments(aRes.data.adjustments || []);
+          } catch { /* pas encore d'ajustements */ }
+        }
       } catch {
         setError('Impossible de charger les données nécessaires.');
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSessionChange = async (id) => {
     setSessionId(id);
@@ -46,6 +62,8 @@ export default function EaseMarginsPage() {
     try {
       const res = await computeAdjustment(sessionId, fabricId);
       setResult(res.data);
+      // Persiste l'adjustment_id dans le parcours utilisateur
+      setFlow({ adjustmentId: res.data.adjustment_id, sessionId, fabricId });
       setSuccess('Ajustement calculé avec succès.');
       const listRes = await listAdjustments(sessionId);
       setAdjustments(listRes.data.adjustments || []);
@@ -65,6 +83,14 @@ export default function EaseMarginsPage() {
           <p className="text-xs text-gray-400 mt-0.5">Calculez les ajustements selon le tissu sélectionné.</p>
         </div>
 
+        {/* Rappel tissu sélectionné */}
+        {flow.fabricName && (
+          <div className="bg-[#4E6E58]/5 border border-[#4E6E58]/20 rounded-2xl px-4 py-2.5 text-xs text-[#3A5242]">
+            Tissu retenu : <span className="font-semibold">{flow.fabricName}</span>
+            {flow.modelName && <> · Patron : <span className="font-semibold">{flow.modelName}</span></>}
+          </div>
+        )}
+
         {error   && <Toast type="error"   message={error}   onClose={() => setError('')} />}
         {success && <Toast type="success" message={success} onClose={() => setSuccess('')} />}
 
@@ -76,7 +102,10 @@ export default function EaseMarginsPage() {
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Session de mesures</label>
             {sessions.length === 0 ? (
               <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700">
-                Aucune session validée. Complétez le module 2 d&apos;abord.
+                Aucune session validée.{' '}
+                <button className="underline font-semibold" onClick={() => navigate('/modules/2')}>
+                  Compléter les mesures
+                </button>
               </div>
             ) : (
               <select
@@ -118,7 +147,33 @@ export default function EaseMarginsPage() {
           </button>
         </div>
 
-        {result && <AdjustmentCard adj={result} />}
+        {result && (
+          <>
+            <AdjustmentCard adj={result} />
+            {/* Bouton "Continuer" — fonctionnel */}
+            <button
+              onClick={() => navigate('/modules/6')}
+              className="w-full rounded-2xl py-3.5 text-sm font-bold text-white flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
+            >
+              Vérifier la compatibilité →
+            </button>
+          </>
+        )}
+
+        {/* Si déjà un adjustmentId dans le flow, permettre de continuer sans recalculer */}
+        {!result && flow.adjustmentId && (
+          <div className="bg-white rounded-2xl shadow-sm border border-[#4E6E58]/20 px-4 py-3 flex items-center justify-between">
+            <p className="text-xs text-[#3A5242]">Ajustement déjà calculé.</p>
+            <button
+              onClick={() => navigate('/modules/6')}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold text-white"
+              style={{ background: '#D95D39' }}
+            >
+              Compatibilité →
+            </button>
+          </div>
+        )}
 
         {sessionId && (
           <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5">
@@ -132,12 +187,27 @@ export default function EaseMarginsPage() {
             ) : (
               <div className="space-y-2">
                 {adjustments.map((a) => (
-                  <div key={a.adjustment_id} className="flex items-center justify-between py-2.5 border-b border-[#F0EDE8] last:border-0">
+                  <div
+                    key={a.adjustment_id}
+                    className={`flex items-center justify-between py-2.5 border-b border-[#F0EDE8] last:border-0 ${
+                      a.adjustment_id === flow.adjustmentId ? 'bg-[#4E6E58]/5 rounded-xl px-2' : ''
+                    }`}
+                  >
                     <div>
                       <p className="text-sm font-medium text-gray-800">{a.fabric_name}</p>
                       <p className="text-xs text-gray-400">{a.elasticity_category} · {new Date(a.calculated_at).toLocaleDateString('fr-FR')}</p>
                     </div>
-                    <p className="text-xs text-gray-500">P:{a.adjusted_bust_cm}cm · T:{a.adjusted_waist_cm}cm · H:{a.adjusted_hips_cm}cm</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-gray-500">P:{a.adjusted_bust_cm}cm · T:{a.adjusted_waist_cm}cm · H:{a.adjusted_hips_cm}cm</p>
+                      {a.adjustment_id !== flow.adjustmentId && (
+                        <button
+                          onClick={() => { setFlow({ adjustmentId: a.adjustment_id }); setSuccess('Ajustement sélectionné.'); }}
+                          className="text-[10px] px-2 py-0.5 rounded-lg bg-[#D95D39]/10 text-[#D95D39] font-semibold"
+                        >
+                          Utiliser
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
