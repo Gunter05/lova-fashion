@@ -116,6 +116,8 @@ app.add_middleware(
         "https://lova-fashion.vercel.app",  # production Vercel domain
         *_EXTRA_ORIGINS,               # extra origins via env var
     ],
+    # Covers all Vercel preview URLs for this project (change on every deploy)
+    allow_origin_regex=r"https://lova-fashion(-[a-z0-9]+)*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
