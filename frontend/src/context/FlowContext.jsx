@@ -6,6 +6,7 @@
  *
  * Stockage : localStorage (survit aux rechargements de page)
  */
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useCallback } from 'react';
 
 const STORAGE_KEY = 'lova_flow';

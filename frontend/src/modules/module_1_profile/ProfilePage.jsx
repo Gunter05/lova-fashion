@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getMyProfile, updateMyProfile, uploadProfilePhoto, getPhotoHistory } from '../../api/modules';
 
-const ROLE_LABELS = { Client: 'Client', Tailor: 'Tailleur', Admin: 'Administrateur' };
-
 export default function ProfilePage() {
-  const { user, login, token } = useAuth();
+  const { login, token } = useAuth();
+  const { t, locale } = useLanguage();
   const fileRef = useRef(null);
 
   const [profile,   setProfile]   = useState(null);
@@ -17,6 +17,11 @@ export default function ProfilePage() {
   const [success,   setSuccess]   = useState('');
   const [form,      setForm]      = useState({ nom: '', email: '' });
 
+  const getRoleLabel = (role) => {
+    if (!role) return '';
+    return t(`profile.roles.${role}`) || role;
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -25,12 +30,12 @@ export default function ProfilePage() {
         setPhotos(phRes.data || []);
         setForm({ nom: pRes.data.nom, email: pRes.data.email });
       } catch {
-        setError('Impossible de charger le profil.');
+        setError(t('profile.unableLoad'));
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [t]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -41,9 +46,9 @@ export default function ProfilePage() {
       const res = await updateMyProfile(form);
       setProfile(res.data);
       login(res.data, token);
-      setSuccess('Profil mis à jour avec succès.');
+      setSuccess(t('profile.updated'));
     } catch (err) {
-      setError(err?.response?.data?.detail?.message || 'Erreur lors de la mise à jour.');
+      setError(err?.response?.data?.detail?.message || 'Error updating.');
     } finally {
       setSaving(false);
     }
@@ -57,9 +62,9 @@ export default function ProfilePage() {
     try {
       const res = await uploadProfilePhoto(file);
       setPhotos((prev) => [res.data, ...prev]);
-      setSuccess('Photo de profil mise à jour.');
+      setSuccess(t('profile.photoUpdated'));
     } catch (err) {
-      setError(err?.response?.data?.detail?.message || "Échec du téléversement.");
+      setError(err?.response?.data?.detail?.message || t('profile.uploadFailed'));
     } finally {
       setUploading(false);
       e.target.value = '';
@@ -82,7 +87,7 @@ export default function ProfilePage() {
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           className="relative shrink-0 group"
-          title="Changer la photo"
+          title={t('profile.changePhoto')}
         >
           <div
             className="w-20 h-20 rounded-full overflow-hidden ring-4 ring-[#F0EDE8]"
@@ -93,7 +98,7 @@ export default function ProfilePage() {
               : <span className="w-full h-full flex items-center justify-center text-2xl font-extrabold text-white">{initials}</span>}
           </div>
           <span className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-medium">
-            {uploading ? '…' : 'Modifier'}
+            {uploading ? '…' : t('profile.edit')}
           </span>
         </button>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
@@ -102,21 +107,21 @@ export default function ProfilePage() {
           <p className="text-base font-bold text-gray-900">{profile?.nom}</p>
           <p className="text-xs text-gray-400 mt-0.5">{profile?.email}</p>
           <span className="inline-block mt-1.5 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-[#D95D39]/10 text-[#D95D39]">
-            {ROLE_LABELS[profile?.role] ?? profile?.role}
+            {getRoleLabel(profile?.role)}
           </span>
         </div>
       </div>
 
       {/* Edit form */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Informations personnelles</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('profile.personalInfo')}</h2>
         <form onSubmit={handleSave} className="space-y-3">
           {[
-            { label: 'Rôle',               value: ROLE_LABELS[profile?.role] ?? '' },
+            { label: t('profile.role'),               value: getRoleLabel(profile?.role) },
             {
-              label: "Date d'inscription",
+              label: t('profile.regDate'),
               value: profile?.date_inscription
-                ? new Date(profile.date_inscription).toLocaleDateString('fr-FR', { dateStyle: 'long' })
+                ? new Date(profile.date_inscription).toLocaleDateString(locale === 'en' ? 'en-US' : 'fr-FR', { dateStyle: 'long' })
                 : '',
             },
           ].map(({ label, value }) => (
@@ -129,7 +134,7 @@ export default function ProfilePage() {
           ))}
 
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Nom complet</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t('profile.fullName')}</label>
             <input
               name="nom"
               type="text"
@@ -140,7 +145,7 @@ export default function ProfilePage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Adresse e-mail</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t('profile.email')}</label>
             <input
               name="email"
               type="email"
@@ -156,7 +161,7 @@ export default function ProfilePage() {
             className="w-full rounded-2xl py-3.5 text-sm font-bold text-white disabled:opacity-50 mt-1"
             style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
           >
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
+            {saving ? t('profile.savingBtn') : t('profile.saveBtn')}
           </button>
         </form>
       </div>
@@ -164,7 +169,7 @@ export default function ProfilePage() {
       {/* Photo history */}
       {photos.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Historique des photos</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">{t('profile.photoHistory')}</h2>
           <div className="grid grid-cols-4 gap-2">
             {photos.map((p) => (
               <div key={p.id_photo} className="aspect-square rounded-xl overflow-hidden border border-[#F0EDE8]">
