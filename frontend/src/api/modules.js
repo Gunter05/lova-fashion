@@ -13,9 +13,7 @@ export const updateMyProfile = (data)       => client.patch('/api/v1/users/me', 
 export const uploadProfilePhoto = (file) => {
   const fd = new FormData();
   fd.append('file', file);
-  return client.post('/api/v1/users/me/photos', fd, {
-    headers: { 'Content-Type': undefined },
-  });
+  return client.post('/api/v1/users/me/photos', fd);
 };
 export const getPhotoHistory = ()           => client.get('/api/v1/users/me/photos');
 
@@ -28,9 +26,7 @@ export const triggerProcess   = (id)                    => client.post(`/api/v1/
 export const uploadPhoto      = (id, view, file) => {
   const fd = new FormData();
   fd.append('file', file);
-  return client.put(`/api/v1/measurements/sessions/${id}/photos/${view}`, fd, {
-    headers: { 'Content-Type': undefined },
-  });
+  return client.put(`/api/v1/measurements/sessions/${id}/photos/${view}`, fd);
 };
 
 // ── Module 3: Fabric Catalog ──────────────────────────────────────────────────
