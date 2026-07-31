@@ -414,6 +414,48 @@ class ReportService:
 
     # ── History lists ─────────────────────────────────────────────────────────
 
+    async def list_all_reports(
+        self,
+        db: AsyncSession,
+    ) -> list[RapportMesure]:
+        """
+        Return all reports, ordered newest first.
+        """
+        import json as _json
+        from sqlalchemy import text as _text
+        from types import SimpleNamespace
+        result = await db.execute(
+            _text("SELECT * FROM rapport_mesure ORDER BY generated_at DESC")
+        )
+        rows = result.fetchall()
+        reports = []
+        for row in rows:
+            adj_meas = row.adjusted_measurements
+            if isinstance(adj_meas, str):
+                adj_meas = _json.loads(adj_meas)
+            incompatible = row.incompatible_zones
+            if isinstance(incompatible, str):
+                try:
+                    incompatible = _json.loads(incompatible)
+                except Exception:
+                    incompatible = None
+            gen_at = row.generated_at
+            if isinstance(gen_at, str):
+                gen_at = datetime.fromisoformat(gen_at)
+            reports.append(SimpleNamespace(
+                id_report=uuid.UUID(row.id_report) if isinstance(row.id_report, str) else row.id_report,
+                user_id=uuid.UUID(row.user_id) if isinstance(row.user_id, str) else row.user_id,
+                adjustment_id=uuid.UUID(row.adjustment_id) if isinstance(row.adjustment_id, str) else row.adjustment_id,
+                fabric_id=uuid.UUID(row.fabric_id) if isinstance(row.fabric_id, str) else row.fabric_id,
+                model_id=uuid.UUID(row.model_id) if isinstance(row.model_id, str) else row.model_id,
+                verdict=row.verdict,
+                advice=row.advice,
+                adjusted_measurements=adj_meas,
+                incompatible_zones=incompatible,
+                generated_at=gen_at,
+            ))
+        return reports
+
     async def list_reports_for_client(
         self,
         user_id: str,
