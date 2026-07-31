@@ -7,13 +7,14 @@
  */
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useFlow } from '../../context/FlowContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 const STEPS = [
-  { label: 'Mesures',   short: '1', path: '/modules/2' },
-  { label: 'Catalogue', short: '2', path: '/modules/3' },
-  { label: 'Aisance',   short: '3', path: '/modules/5' },
-  { label: 'Compat.',   short: '4', path: '/modules/6' },
-  { label: 'Rapport',   short: '5', path: '/modules/7' },
+  { labelKey: 'nav.journey.measurements', short: '1', path: '/modules/2' },
+  { labelKey: 'nav.journey.catalog',      short: '2', path: '/modules/3' },
+  { labelKey: 'nav.journey.ease',         short: '3', path: '/modules/5' },
+  { labelKey: 'nav.journey.compat',       short: '4', path: '/modules/6' },
+  { labelKey: 'nav.journey.report',       short: '5', path: '/modules/7' },
 ];
 
 function activeIndex(pathname) {
@@ -38,6 +39,7 @@ export default function JourneyProgress() {
   const navigate     = useNavigate();
   const { pathname } = useLocation();
   const { flow }     = useFlow();
+  const { t }        = useLanguage();
 
   const current   = activeIndex(pathname);
   const completed = completedSteps(flow);
@@ -54,6 +56,13 @@ export default function JourneyProgress() {
           const isActive    = i === current;
           const isLast      = i === STEPS.length - 1;
           const isReachable = i === 0 || completed.has(i - 1) || isDone || isActive;
+          const label       = t(step.labelKey);
+
+          const ariaLabel = isDone
+            ? t('nav.journey.completed', { n: i + 1, label })
+            : isActive
+            ? t('nav.journey.inProgress', { n: i + 1, label })
+            : `${label}`;
 
           return (
             <div key={step.path} className="flex items-start flex-1 min-w-0">
@@ -62,8 +71,8 @@ export default function JourneyProgress() {
                 <button
                   onClick={() => isReachable && navigate(step.path)}
                   disabled={!isReachable}
-                  title={step.label}
-                  aria-label={`Étape ${i + 1} : ${step.label}${isDone ? ' (complétée)' : isActive ? ' (en cours)' : ''}`}
+                  title={label}
+                  aria-label={ariaLabel}
                   className={[
                     'w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-all',
                     isActive
@@ -90,7 +99,7 @@ export default function JourneyProgress() {
                   ].join(' ')}
                   style={{ maxWidth: 40 }}
                 >
-                  {step.label}
+                  {label}
                 </span>
               </div>
 

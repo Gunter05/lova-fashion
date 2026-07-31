@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { register as registerApi } from '../../api/auth';
+import { useLanguage } from '../../context/LanguageContext';
 import fashionBg from '../../assets/fashion1.png';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const { t, locale, changeLanguage } = useLanguage();
 
   const [form, setForm] = useState({
     nom: '',
@@ -27,7 +29,7 @@ export default function RegisterPage() {
     try {
       await registerApi(form);
       navigate('/login', {
-        state: { message: 'Compte créé avec succès. Vous pouvez maintenant vous connecter.' },
+        state: { message: t('auth.regSuccess') },
       });
     } catch (err) {
       const detail = err?.response?.data?.detail;
@@ -39,7 +41,7 @@ export default function RegisterPage() {
           ? detail
           : detail?.message ||
             backendMessage ||
-            "L'inscription a échoué. Veuillez réessayer.";
+            t('auth.defaultError');
       setError(message);
     } finally {
       setLoading(false);
@@ -55,6 +57,14 @@ export default function RegisterPage() {
         backgroundPosition: 'center',
       }}
     >
+      {/* Floating Language Switcher */}
+      <button
+        onClick={() => changeLanguage(locale === 'en' ? 'fr' : 'en')}
+        className="absolute top-4 right-4 text-xs font-bold px-3 py-1.5 rounded-xl border border-white/30 text-white bg-white/10 hover:bg-white/20 transition z-50 backdrop-blur"
+      >
+        {locale === 'en' ? 'FR' : 'EN'}
+      </button>
+
       <div className="relative z-10 w-full max-w-sm mx-4">
         <div className="text-center mb-6">
           <h1 className="text-4xl font-extrabold tracking-widest text-white">LOVA</h1>
@@ -87,9 +97,9 @@ export default function RegisterPage() {
               className="text-xl font-extrabold"
               style={{ background: 'linear-gradient(90deg, #EC4899, #9333EA)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
             >
-              Créer un compte
+              {t('auth.joinTitle')}
             </h2>
-            <p className="text-white/60 text-xs mt-1">Rejoignez LOVA FASHION</p>
+            <p className="text-white/60 text-xs mt-1">{t('auth.joinSubtitle')}</p>
           </div>
 
           {error && (
@@ -100,8 +110,8 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} noValidate className="space-y-3">
             {[
-              { name: 'nom',   placeholder: 'Nom complet',    type: 'text'  },
-              { name: 'email', placeholder: 'Adresse e-mail', type: 'email' },
+              { name: 'nom',   placeholder: t('auth.fullName'),    type: 'text'  },
+              { name: 'email', placeholder: t('auth.email'),       type: 'email' },
             ].map(({ name, placeholder, type }) => (
               <div
                 key={name}
@@ -132,7 +142,7 @@ export default function RegisterPage() {
                 required
                 value={form.mot_de_passe}
                 onChange={handleChange}
-                placeholder="Mot de passe"
+                placeholder={t('auth.password')}
                 className="flex-1 bg-transparent text-sm text-white placeholder-white/50 focus:outline-none"
               />
               <button type="button" onClick={() => setShowPwd(!showPwd)} className="text-white/50 hover:text-white/80">
@@ -149,13 +159,13 @@ export default function RegisterPage() {
               className="w-full rounded-2xl py-3.5 text-sm font-bold text-white flex items-center justify-center gap-2 transition-opacity disabled:opacity-60 mt-1"
               style={{ background: 'linear-gradient(90deg, #EC4899, #9333EA)' }}
             >
-              {loading ? 'Création en cours…' : <>Créer mon compte <span className="text-lg">→</span></>}
+              {loading ? t('auth.registering') : <>{t('auth.registerBtn')} <span className="text-lg">→</span></>}
             </button>
           </form>
 
           <div className="flex items-center gap-3 my-4">
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.2)' }} />
-            <span className="text-xs text-white/40">ou</span>
+            <span className="text-xs text-white/40">{t('common.or')}</span>
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.2)' }} />
           </div>
 
@@ -164,7 +174,7 @@ export default function RegisterPage() {
             className="flex items-center justify-center gap-2 w-full rounded-2xl py-3 text-sm font-semibold transition"
             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)', color: 'white' }}
           >
-            Déjà un compte ? Se connecter
+            {t('auth.alreadyHaveAccount')}
           </Link>
         </div>
       </div>

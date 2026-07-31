@@ -1,24 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listSessions, listAdjustments, listModels, createVerification, getVerification } from '../../api/modules';
+import { listSessions, listAdjustments, listModels, createVerification } from '../../api/modules';
 import { useFlow } from '../../context/FlowContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 const VERDICT_CONFIG = {
   compatible: {
-    label: 'Compatible ✓',
-    color: 'bg-[#4E6E58]/10 text-[#4E6E58] border-[#4E6E58]/20',
     gauge: '#4E6E58',
     pct: 95,
   },
   partially_compatible: {
-    label: 'Partiellement compatible',
-    color: 'bg-amber-50 text-amber-700 border-amber-200',
     gauge: '#D97706',
     pct: 55,
   },
   incompatible: {
-    label: 'Incompatible ✗',
-    color: 'bg-red-50 text-red-700 border-red-200',
     gauge: '#EF4444',
     pct: 20,
   },
@@ -27,6 +22,7 @@ const VERDICT_CONFIG = {
 export default function CompatibilityPage() {
   const navigate = useNavigate();
   const { flow, setFlow } = useFlow();
+  const { t, locale } = useLanguage();
 
   const [sessions,    setSessions]    = useState([]);
   const [adjustments, setAdjustments] = useState([]);
@@ -59,12 +55,12 @@ export default function CompatibilityPage() {
           } catch { /* pas encore */ }
         }
       } catch {
-        setError('Impossible de charger les données.');
+        setError(t('compatibility.unableLoadData'));
       } finally {
         setLoading(false);
       }
     })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSessionChange = async (id) => {
     setSessionId(id); setAdjId(''); setResult(null); setAdjustments([]);
@@ -114,15 +110,15 @@ export default function CompatibilityPage() {
     <div className="min-h-screen bg-[#FAF8F5] px-4 py-6">
       <div className="space-y-4 max-w-lg mx-auto">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Compatibilité</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Vérifiez la compatibilité tissu / patron / morphologie.</p>
+          <h1 className="text-lg font-bold text-gray-900">{t('compatibility.title')}</h1>
+          <p className="text-xs text-gray-400 mt-0.5">{t('compatibility.subtitle')}</p>
         </div>
 
         {/* Rappel sélections en cours */}
         {(flow.fabricName || flow.modelName) && (
           <div className="bg-[#4E6E58]/5 border border-[#4E6E58]/20 rounded-2xl px-4 py-2.5 text-xs text-[#3A5242] space-y-0.5">
-            {flow.fabricName && <p>Tissu : <span className="font-semibold">{flow.fabricName}</span></p>}
-            {flow.modelName  && <p>Patron : <span className="font-semibold">{flow.modelName}</span></p>}
+            {flow.fabricName && <p>{t('catalog.selected.fabric')} <span className="font-semibold">{flow.fabricName}</span></p>}
+            {flow.modelName  && <p>{t('catalog.selected.pattern')} <span className="font-semibold">{flow.modelName}</span></p>}
           </div>
         )}
 
@@ -134,16 +130,16 @@ export default function CompatibilityPage() {
         )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700">Sélection</h2>
+          <h2 className="text-sm font-semibold text-gray-700">{t('compatibility.selection')}</h2>
 
           {/* Session */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Session de mesures</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('compatibility.measureSession')}</label>
             {sessions.length === 0 ? (
               <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700">
-                Aucune session validée.{' '}
+                {t('compatibility.noValidatedSession')}{' '}
                 <button className="underline font-semibold" onClick={() => navigate('/modules/2')}>
-                  Compléter les mesures
+                  {t('compatibility.completeMeasurements')}
                 </button>
               </div>
             ) : (
@@ -152,10 +148,10 @@ export default function CompatibilityPage() {
                 onChange={(e) => handleSessionChange(e.target.value)}
                 className="w-full rounded-xl border border-[#E8E4DF] px-4 py-3 text-sm bg-white focus:outline-none focus:border-[#D95D39]"
               >
-                <option value="">Choisir une session…</option>
+                <option value="">{t('compatibility.chooseSession')}</option>
                 {sessions.map((s) => (
                   <option key={s.session_id} value={s.session_id}>
-                    Session du {new Date(s.created_at).toLocaleDateString('fr-FR')}
+                    {locale === 'en' ? `Session of ${new Date(s.created_at).toLocaleDateString('en-US')}` : `Session du ${new Date(s.created_at).toLocaleDateString('fr-FR')}`}
                   </option>
                 ))}
               </select>
@@ -165,14 +161,14 @@ export default function CompatibilityPage() {
           {/* Ajustement */}
           {sessionId && (
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Ajustement (tissu + aisance)</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('compatibility.adjustmentLabel')}</label>
               {adjLoading ? (
-                <p className="text-xs text-gray-400 py-2">Chargement…</p>
+                <p className="text-xs text-gray-400 py-2">{t('common.loading')}</p>
               ) : adjustments.length === 0 ? (
                 <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700">
-                  Aucun ajustement.{' '}
+                  {t('compatibility.noAdjustment')}{' '}
                   <button className="underline font-semibold" onClick={() => navigate('/modules/5')}>
-                    Calculer les marges d'aisance
+                    {t('compatibility.calculateEaseBtn')}
                   </button>
                 </div>
               ) : (
@@ -185,7 +181,7 @@ export default function CompatibilityPage() {
                   }}
                   className="w-full rounded-xl border border-[#E8E4DF] px-4 py-3 text-sm bg-white focus:outline-none focus:border-[#D95D39]"
                 >
-                  <option value="">Choisir un ajustement…</option>
+                  <option value="">{t('compatibility.chooseAdjustment')}</option>
                   {adjustments.map((a) => (
                     <option key={a.adjustment_id} value={a.adjustment_id}>
                       {a.fabric_name} — {a.elasticity_category}
@@ -198,12 +194,12 @@ export default function CompatibilityPage() {
 
           {/* Patron */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Patron</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('compatibility.patternLabel')}</label>
             {models.length === 0 ? (
               <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700">
-                Aucun patron disponible.{' '}
+                {t('compatibility.noPatternAvailable')}{' '}
                 <button className="underline font-semibold" onClick={() => navigate('/modules/3')}>
-                  Choisir un patron
+                  {t('compatibility.choosePatternBtn')}
                 </button>
               </div>
             ) : (
@@ -212,9 +208,9 @@ export default function CompatibilityPage() {
                 onChange={(e) => setModelId(e.target.value)}
                 className="w-full rounded-xl border border-[#E8E4DF] px-4 py-3 text-sm bg-white focus:outline-none focus:border-[#D95D39]"
               >
-                <option value="">Choisir un patron…</option>
+                <option value="">{t('compatibility.choosePatternOption')}</option>
                 {models.map((m) => (
-                  <option key={m.model_id} value={m.model_id}>{m.model_name} — {m.garment_type}</option>
+                  <option key={m.model_id} value={m.model_id}>{m.model_name} — {t(`types.${m.garment_type}`)}</option>
                 ))}
               </select>
             )}
@@ -226,17 +222,17 @@ export default function CompatibilityPage() {
             className="w-full rounded-2xl py-3.5 text-sm font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
             style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
           >
-            {checking ? 'Vérification…' : <>Voir la compatibilité <span>→</span></>}
+            {checking ? t('compatibility.verifying') : <>{t('compatibility.checkBtn')} <span>→</span></>}
           </button>
         </div>
 
-        {result && <CompatibilityResult result={result} onContinue={() => navigate('/modules/7')} />}
+        {result && <CompatibilityResult result={result} onContinue={() => navigate('/modules/7')} t={t} />}
       </div>
     </div>
   );
 }
 
-function CompatibilityResult({ result, onContinue }) {
+function CompatibilityResult({ result, onContinue, t }) {
   // Le backend renvoie un verdict direct (compatible / partially_compatible / incompatible)
   const verdict = result.verdict || 'compatible';
   const cfg     = VERDICT_CONFIG[verdict] ?? VERDICT_CONFIG.compatible;
@@ -245,7 +241,7 @@ function CompatibilityResult({ result, onContinue }) {
     <div className="space-y-4">
       {/* Compatibility gauge card */}
       <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5 text-center">
-        <p className="text-xs text-gray-400 mb-1">Compatibilité</p>
+        <p className="text-xs text-gray-400 mb-1">{t('compatibility.gaugeLabel')}</p>
         {result.fabric_name && <p className="text-xs text-gray-500 mb-4">{result.fabric_name}</p>}
         <div className="relative w-32 h-32 mx-auto mb-3">
           <svg className="w-32 h-32 -rotate-90" viewBox="0 0 100 100">
@@ -258,7 +254,7 @@ function CompatibilityResult({ result, onContinue }) {
           </div>
         </div>
         <p className="text-sm font-bold" style={{ color: cfg.gauge }}>
-          {verdict === 'compatible' ? 'Excellent choix !' : cfg.label}
+          {verdict === 'compatible' ? t('compatibility.verdicts.excellent') : t(`compatibility.verdicts.${verdict}`)}
         </p>
         {result.advice && (
           <p className="text-xs text-gray-400 mt-2 max-w-xs mx-auto">{result.advice}</p>
@@ -268,7 +264,7 @@ function CompatibilityResult({ result, onContinue }) {
       {/* Détail zones incompatibles */}
       {result.incompatible_zones?.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5 space-y-2">
-          <h3 className="text-sm font-semibold text-gray-700">Zones à surveiller</h3>
+          <h3 className="text-sm font-semibold text-gray-700">{t('compatibility.watchZones')}</h3>
           {result.incompatible_zones.map((z, i) => (
             <div key={i} className="flex gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3">
               <span className="text-red-400 mt-0.5 shrink-0">⚠</span>
@@ -287,7 +283,7 @@ function CompatibilityResult({ result, onContinue }) {
         className="w-full rounded-2xl py-3.5 text-sm font-bold text-white flex items-center justify-center gap-2"
         style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
       >
-        Voir mon récapitulatif →
+        {t('compatibility.seeSummaryBtn')}
       </button>
     </div>
   );
