@@ -11,6 +11,84 @@ import {
 import { useFlow } from '../../context/FlowContext';
 import { useLanguage } from '../../context/LanguageContext';
 
+// ─── Error parsing utility ────────────────────────────────────────────────────
+/**
+ * Extracts a human-readable message from an Axios error.
+ * Handles the three response shapes the backend can return:
+ *   1. { detail: "string" }                       — HTTPException
+ *   2. { detail: [{field, message}, ...] }        — 422 field-level list
+ *   3. { detail: "...", errors: [{loc, msg},...]} — RequestValidationError wrapper
+ *   4. Network error (no response)
+ */
+function extractErrorMessage(err, t) {
+  // Log the full error for debugging
+  console.error('[MeasurementsPage] API error:', err?.response?.status, err?.response?.data);
+
+  const data   = err?.response?.data;
+  const detail = data?.detail;
+
+  // Shape 3: wrapper with `errors` array (RequestValidationError from main.py handler)
+  if (data?.errors && Array.isArray(data.errors)) {
+    const msgs = data.errors
+      .map((e) => e.msg || e.message || JSON.stringify(e))
+      .filter(Boolean);
+    return msgs.length ? msgs.join(' — ') : (detail || t('common.error'));
+  }
+
+  // Shape 2: array of field-level errors
+  if (Array.isArray(detail)) {
+    const msgs = detail.map((d) => d.message || d.msg || JSON.stringify(d)).filter(Boolean);
+    return msgs.length ? msgs.join(' — ') : t('common.error');
+  }
+
+  // Shape 1: plain string
+  if (typeof detail === 'string' && detail.trim()) return detail;
+
+  // Network error
+  if (!err?.response) return 'Erreur réseau. Vérifiez votre connexion.';
+
+  return t('common.error');
+}
+
+/**
+ * Converts any image File to a JPEG Blob via canvas.
+ * This ensures the backend always receives image/jpeg, regardless of the
+ * original format (HEIC, HEIF, WebP, PNG from camera, etc.).
+ * Falls back to the original file if conversion fails.
+ */
+async function toJpegBlob(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width  = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        canvas.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(url);
+            if (blob) {
+              // Give the blob a proper filename so content-type is set correctly
+              resolve(new File([blob], 'photo.jpg', { type: 'image/jpeg' }));
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          0.92,
+        );
+      } catch {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const POLL_INTERVAL_MS = 3000;
 
@@ -117,17 +195,16 @@ export default function MeasurementsPage() {
     const setter = view === 'front' ? setUploadingFront : setUploadingProfile;
     setter(true); setError('');
     try {
-      await uploadPhoto(activeSession.session_id, view, file);
+      // Convert to JPEG so the backend always receives a supported MIME type
+      // (handles HEIC, HEIF, WebP, and other camera formats)
+      const jpegFile = await toJpegBlob(file);
+      await uploadPhoto(activeSession.session_id, view, jpegFile);
       setInfo(view === 'front' ? t('measurements.frontPhotoUploaded') : t('measurements.sidePhotoUploaded'));
       // Refresh status to know which photos are uploaded
       const res = await getSessionStatus(activeSession.session_id);
       setSessionStatus(res.data);
     } catch (err) {
-      const detail = err?.response?.data?.detail;
-      const msg = Array.isArray(detail)
-        ? detail.map((d) => d.message || d.msg).join(' ')
-        : (typeof detail === 'string' ? detail : t('common.error'));
-      setError(msg);
+      setError(extractErrorMessage(err, t));
     } finally {
       setter(false);
     }
@@ -148,11 +225,7 @@ export default function MeasurementsPage() {
       setInfo(t('measurements.processingStarted'));
       startPolling(activeSession.session_id);
     } catch (err) {
-      const detail = err?.response?.data?.detail;
-      const msg = Array.isArray(detail)
-        ? detail.map((d) => d.message || d.msg || JSON.stringify(d)).join(' — ')
-        : (typeof detail === 'string' ? detail : t('common.error'));
-      setError(msg);
+      setError(extractErrorMessage(err, t));
     } finally {
       setLaunching(false);
     }

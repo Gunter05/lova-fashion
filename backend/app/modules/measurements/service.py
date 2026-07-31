@@ -262,24 +262,18 @@ class CaptureSessionService:
             )
 
         # --- Step 3: Body-presence validation via MediaPipe (AC-02.4) ---
-        # Re-use the estimator's internal decoder + pose runner for a
-        # lightweight single-photo check (no scale factor or measurement needed).
+        # Lightweight check: only verify the image is decodable (not corrupted).
+        # Full body detection happens in the background estimation task.
+        # This avoids false rejections when MediaPipe misses a valid pose in
+        # certain lighting conditions or image orientations at upload time.
         try:
-            from app.modules.measurements.estimation import (
-                _decode_image,
-                _run_pose,
-                BodyNotDetectedError as _BND,
+            from app.modules.measurements.estimation import _decode_image
+            _decode_image(file_bytes, view)  # raises ValueError if image is corrupt
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Image non lisible ou corrompue. Veuillez retéléverser la photo. ({exc})",
             )
-            img = _decode_image(file_bytes, view)
-            landmarks = _run_pose(img)
-            if landmarks is None:
-                raise _BND(
-                    "Aucun corps humain détecté. "
-                    "Reprenez la photo dans un endroit bien éclairé "
-                    "avec des vêtements ajustés."
-                )
-        except BodyNotDetectedError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
 
         # --- Upload to Supabase Storage (AC-02.5) ---
         photo_url = _storage.upload(
