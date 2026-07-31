@@ -22,7 +22,7 @@ export default function CatalogPage() {
   const [selFabric,     setSelFabric]     = useState(null);
   const [selFabricDet,  setSelFabricDet]  = useState(null);
   const [fabDetLoad,    setFabDetLoad]    = useState(false);
-  const [selecting,     setSelecting]     = useState(false);
+  const [selectingId,   setSelectingId]   = useState(null);  // ID du tissu en cours de sélection
   const [fabLoad,       setFabLoad]       = useState(true);
 
   // ── Model state ──
@@ -69,7 +69,7 @@ export default function CatalogPage() {
   };
 
   const handleSelectFabric = async (fabric) => {
-    setSelecting(true); setError(''); setInfo('');
+    setSelectingId(fabric.fabric_id); setError(''); setInfo('');
     try {
       await selectFabric(fabric.fabric_id);
       // Persiste le tissu dans le parcours utilisateur
@@ -82,7 +82,7 @@ export default function CatalogPage() {
       setError(err?.response?.status === 409
         ? (locale === 'en' ? `Fabric unavailable. ${data?.detail || ''}` : `Tissu indisponible. ${data?.detail || ''}`)
         : data?.detail?.message || 'Error selecting fabric.');
-    } finally { setSelecting(false); }
+    } finally { setSelectingId(null); }
   };
 
   const openFabricDetail = async (fabric) => {
@@ -201,12 +201,12 @@ export default function CatalogPage() {
             ? <p className="text-center text-sm text-gray-400 py-8">{t('catalog.noFabricFound')}</p>
             : <div className="grid grid-cols-2 gap-3">
                 {visibleFabrics.map((f) => (
-                  <FabricCard key={f.fabric_id} fabric={f} onSelect={handleSelectFabric} selecting={selecting} onClick={() => openFabricDetail(f)} />
+                  <FabricCard key={f.fabric_id} fabric={f} onSelect={handleSelectFabric} selectingId={selectingId} onClick={() => openFabricDetail(f)} t={t} />
                 ))}
               </div>
           }
           {selFabric && (
-            <FabricDetail fabric={selFabric} detail={selFabricDet} loading={fabDetLoad} onClose={() => { setSelFabric(null); setSelFabricDet(null); }} onSelect={handleSelectFabric} selecting={selecting} />
+          <FabricDetail fabric={selFabric} detail={selFabricDet} loading={fabDetLoad} onClose={() => { setSelFabric(null); setSelFabricDet(null); }} onSelect={handleSelectFabric} selectingId={selectingId} t={t} />
           )}
         </>
       )}
@@ -259,8 +259,9 @@ function SearchBox({ value, onChange, placeholder }) {
   );
 }
 
-function FabricCard({ fabric, onSelect, selecting, onClick, t }) {
+function FabricCard({ fabric, onSelect, selectingId, onClick, t }) {
   const isAvailable = fabric.fabric_status === 'available';
+  const isSelecting = selectingId === fabric.fabric_id;
   const imgSrc = fabric.fabric_photo || FALLBACK_IMG;
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition" onClick={onClick}>
@@ -277,19 +278,20 @@ function FabricCard({ fabric, onSelect, selecting, onClick, t }) {
         <p className="text-sm font-semibold text-gray-900 leading-tight">{fabric.fabric_name}</p>
         <p className="text-xs text-gray-400">{fabric.category_name}</p>
         <p className="text-sm font-bold text-gray-800 mt-auto">{fabric.fabric_unit_price?.toLocaleString('fr-FR')} FCFA/m</p>
-        <button onClick={(e) => { e.stopPropagation(); onSelect(fabric); }} disabled={selecting || !isAvailable}
+        <button onClick={(e) => { e.stopPropagation(); onSelect(fabric); }} disabled={isSelecting || !isAvailable}
           className="w-full mt-1 py-2 rounded-xl text-xs font-bold text-white disabled:opacity-40 transition"
           style={{ background: isAvailable ? '#D95D39' : '#ccc' }}>
-          {t('catalog.fabricCard.chooseBtn')}
+          {isSelecting ? '…' : t('catalog.fabricCard.chooseBtn')}
         </button>
       </div>
     </div>
   );
 }
 
-function FabricDetail({ fabric, detail, loading, onClose, onSelect, selecting }) {
+function FabricDetail({ fabric, detail, loading, onClose, onSelect, selectingId, t }) {
   const data = detail || fabric;   // fallback sur les données de liste si l'appel est encore en cours
   const imgSrc = data.fabric_photo || FALLBACK_IMG;
+  const isSelecting = selectingId === fabric.fabric_id;
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -322,7 +324,7 @@ function FabricDetail({ fabric, detail, loading, onClose, onSelect, selecting })
             </div>
           </>
         )}
-        <button onClick={() => { onSelect(fabric); onClose(); }} disabled={selecting || fabric.fabric_status !== 'available'}
+        <button onClick={() => { onSelect(fabric); onClose(); }} disabled={isSelecting || fabric.fabric_status !== 'available'}
           className="w-full py-3.5 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
           style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}>
           {t('catalog.fabricDetail.chooseBtn')}
