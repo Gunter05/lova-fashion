@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { login as loginApi } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import fashionBg from '../../assets/fashion1.png';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const auth = useAuth();
+  const { t, locale, changeLanguage } = useLanguage();
 
   const [email, setEmail] = useState('');
   const [mot_de_passe, setMotDePasse] = useState('');
@@ -31,7 +33,7 @@ export default function LoginPage() {
       const message =
         err?.response?.data?.detail ||
         err?.response?.data?.message ||
-        'Identifiants incorrects. Veuillez réessayer.';
+        t('auth.defaultError');
       setError(message);
     } finally {
       setLoading(false);
@@ -47,6 +49,13 @@ export default function LoginPage() {
         backgroundPosition: 'center',
       }}
     >
+      {/* Floating Language Switcher */}
+      <button
+        onClick={() => changeLanguage(locale === 'en' ? 'fr' : 'en')}
+        className="absolute top-4 right-4 text-xs font-bold px-3 py-1.5 rounded-xl border border-white/30 text-white bg-white/10 hover:bg-white/20 transition z-50 backdrop-blur"
+      >
+        {locale === 'en' ? 'FR' : 'EN'}
+      </button>
 
       {/* Glassmorphism Card */}
       <div className="relative z-10 w-full max-w-sm mx-4">
@@ -82,14 +91,14 @@ export default function LoginPage() {
 
           {/* Title */}
           <div className="text-center mb-6">
-            <p className="text-white/80 text-sm mb-1">Bienvenue chez</p>
+            <p className="text-white/80 text-sm mb-1">{t('auth.welcome')}</p>
             <h2
               className="text-2xl font-extrabold"
               style={{ background: 'linear-gradient(90deg, #EC4899, #9333EA)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
             >
-              LOVA FASHION
+              {t('auth.loginTitle')}
             </h2>
-            <p className="text-white/60 text-xs mt-1">Connectez-vous pour continuer</p>
+            <p className="text-white/60 text-xs mt-1">{t('auth.loginSubtitle')}</p>
           </div>
 
           {error && (
@@ -113,7 +122,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Adresse e-mail"
+                placeholder={t('auth.email')}
                 className="flex-1 bg-transparent text-sm text-white placeholder-white/50 focus:outline-none"
               />
             </div>
@@ -132,7 +141,7 @@ export default function LoginPage() {
                 required
                 value={mot_de_passe}
                 onChange={(e) => setMotDePasse(e.target.value)}
-                placeholder="Mot de passe"
+                placeholder={t('auth.password')}
                 className="flex-1 bg-transparent text-sm text-white placeholder-white/50 focus:outline-none"
               />
               <button type="button" onClick={() => setShowPwd(!showPwd)} className="text-white/50 hover:text-white/80">
@@ -150,8 +159,8 @@ export default function LoginPage() {
               className="w-full rounded-2xl py-3.5 text-sm font-bold text-white flex items-center justify-center gap-2 transition-opacity disabled:opacity-60"
               style={{ background: 'linear-gradient(90deg, #EC4899, #9333EA)' }}
             >
-              {loading ? 'Connexion en cours…' : (
-                <>Se connecter <span className="text-lg">→</span></>
+              {loading ? t('auth.loggingIn') : (
+                <>{t('auth.loginBtn')} <span className="text-lg">→</span></>
               )}
             </button>
           </form>
@@ -165,17 +174,17 @@ export default function LoginPage() {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="w-4 h-4 accent-pink-500 rounded"
               />
-              <span className="text-xs text-white/70">Se souvenir de moi</span>
+              <span className="text-xs text-white/70">{t('auth.rememberMe')}</span>
             </label>
             <button type="button" className="text-xs text-pink-400 hover:text-pink-300">
-              Mot de passe oublié ?
+              {t('auth.forgotPassword')}
             </button>
           </div>
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.2)' }} />
-            <span className="text-xs text-white/40">ou</span>
+            <span className="text-xs text-white/40">{t('common.or')}</span>
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.2)' }} />
           </div>
 
@@ -188,15 +197,15 @@ export default function LoginPage() {
             <svg className="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
             </svg>
-            Créer un compte
+            {t('auth.createAccount')}
           </Link>
 
           {/* Legal */}
           <p className="text-center text-xs text-white/40 mt-4">
-            En continuant, vous acceptez nos{' '}
-            <span className="text-pink-400 cursor-pointer hover:underline">Conditions d&apos;utilisation</span>
-            {' '}et notre{' '}
-            <span className="text-pink-400 cursor-pointer hover:underline">Politique de confidentialité</span>
+            {locale === 'en' ? 'By continuing, you accept our ' : 'En continuant, vous acceptez nos '}
+            <span className="text-pink-400 cursor-pointer hover:underline">{t('auth.terms')}</span>
+            {locale === 'en' ? ' and our ' : ' et notre '}
+            <span className="text-pink-400 cursor-pointer hover:underline">{t('auth.privacy')}</span>
           </p>
         </div>
       </div>

@@ -2,23 +2,16 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listFabrics, listCategories, selectFabric, listModels, getModel } from '../../api/modules';
 import { useFlow } from '../../context/FlowContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=800';
 
-const STATUS_CONFIG = {
-  available:   { label: 'Disponible', cls: 'bg-[#4E6E58]/10 text-[#4E6E58]' },
-  unavailable: { cls: 'bg-amber-50 text-amber-700', label: 'Indisponible' },
-  archived:    { cls: 'bg-gray-100 text-gray-400',  label: 'Archivé' },
-};
 const GARMENT_TYPES = ['', 'Dress', 'Shirt', 'Trousers', 'Skirt', 'Jacket', 'Coat', 'Suit'];
-const TYPE_LABELS = {
-  '': 'Tous', Dress: 'Robe', Shirt: 'Chemise', Trousers: 'Pantalon',
-  Skirt: 'Jupe', Jacket: 'Veste', Coat: 'Manteau', Suit: 'Costume',
-};
 
 export default function CatalogPage() {
   const navigate = useNavigate();
   const { flow, setFlow } = useFlow();
+  const { t, locale } = useLanguage();
   const [activeTab,   setActiveTab]   = useState('TISSUS');
 
   // ── Fabric state ──
@@ -49,27 +42,27 @@ export default function CatalogPage() {
         const [fRes, cRes] = await Promise.all([listFabrics(), listCategories()]);
         setFabrics(fRes.data);
         setCategories(cRes.data);
-      } catch { setError('Impossible de charger les tissus.'); }
+      } catch { setError(t('catalog.errors.unableLoadFabrics')); }
       finally { setFabLoad(false); }
     })();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     (async () => {
       try {
         const res = await listModels(typeFilter || undefined);
         setModels(res.data.items || []);
-      } catch { setError('Impossible de charger les modèles.'); }
+      } catch { setError(t('catalog.errors.unableLoadModels')); }
       finally { setModLoad(false); }
     })();
-  }, [typeFilter]);
+  }, [typeFilter, t]);
 
   const handleCatChange = async (catId) => {
     setCatFilter(catId); setFabLoad(true);
     try {
       const res = await listFabrics(catId || undefined);
       setFabrics(res.data);
-    } catch { setError('Erreur lors du filtrage.'); }
+    } catch { setError(t('catalog.errors.filterError')); }
     finally { setFabLoad(false); }
   };
 
@@ -79,14 +72,14 @@ export default function CatalogPage() {
       await selectFabric(fabric.fabric_id);
       // Persiste le tissu dans le parcours utilisateur
       setFlow({ fabricId: fabric.fabric_id, fabricName: fabric.fabric_name });
-      setInfo(`"${fabric.fabric_name}" sélectionné. Choisissez maintenant votre patron.`);
+      setInfo(locale === 'en' ? `"${fabric.fabric_name}" selected. Choose your pattern now.` : `"${fabric.fabric_name}" sélectionné. Choisissez maintenant votre patron.`);
       // Bascule sur l'onglet Modèles pour guider l'utilisateur
       setActiveTab('MODÈLES');
     } catch (err) {
       const data = err?.response?.data;
       setError(err?.response?.status === 409
-        ? `Tissu indisponible. ${data?.detail || ''}`
-        : data?.detail?.message || 'Erreur lors de la sélection.');
+        ? (locale === 'en' ? `Fabric unavailable. ${data?.detail || ''}` : `Tissu indisponible. ${data?.detail || ''}`)
+        : data?.detail?.message || 'Error selecting fabric.');
     } finally { setSelecting(false); }
   };
 
@@ -95,13 +88,13 @@ export default function CatalogPage() {
     try {
       const res = await getModel(model.model_id);
       setSelModelDet(res.data);
-    } catch { setError('Impossible de charger les détails du patron.'); }
+    } catch { setError(t('catalog.modelDetail.unableLoad')); }
     finally { setModDetLoad(false); }
   };
 
   const handleSelectModel = (model) => {
     setFlow({ modelId: model.model_id, modelName: model.model_name });
-    setInfo(`Patron "${model.model_name}" sélectionné.`);
+    setInfo(locale === 'en' ? `Pattern "${model.model_name}" selected.` : `Patron "${model.model_name}" sélectionné.`);
   };
 
   const visibleFabrics = fabrics.filter((f) =>
@@ -116,8 +109,8 @@ export default function CatalogPage() {
       {/* Header */}
       <div className="flex items-center justify-between pt-1">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Choisissez votre modèle</h1>
-          <p className="text-xs text-gray-400 mt-0.5">et votre tissu</p>
+          <h1 className="text-lg font-bold text-gray-900">{t('catalog.title')}</h1>
+          <p className="text-xs text-gray-400 mt-0.5">{t('catalog.subtitle')}</p>
         </div>
         {/* Bouton Continuer — actif dès qu'un tissu ET un patron sont choisis */}
         {flow.fabricId && flow.modelId ? (
@@ -126,7 +119,7 @@ export default function CatalogPage() {
             className="px-3 py-1.5 rounded-xl text-xs font-bold text-white flex items-center gap-1"
             style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
           >
-            Continuer →
+            {t('common.continue')} →
           </button>
         ) : (
           <button className="w-8 h-8 rounded-full bg-white shadow-sm border border-[#F0EDE8] flex items-center justify-center text-gray-400">
@@ -143,12 +136,12 @@ export default function CatalogPage() {
           <div className="space-y-0.5">
             {flow.fabricName && (
               <p className="text-xs text-[#3A5242]">
-                <span className="font-semibold">Tissu :</span> {flow.fabricName}
+                <span className="font-semibold">{t('catalog.selected.fabric')}</span> {flow.fabricName}
               </p>
             )}
             {flow.modelName && (
               <p className="text-xs text-[#3A5242]">
-                <span className="font-semibold">Patron :</span> {flow.modelName}
+                <span className="font-semibold">{t('catalog.selected.pattern')}</span> {flow.modelName}
               </p>
             )}
           </div>
@@ -158,7 +151,7 @@ export default function CatalogPage() {
               className="shrink-0 ml-3 px-3 py-1.5 rounded-xl text-xs font-bold text-white"
               style={{ background: '#D95D39' }}
             >
-              Calculer l'aisance →
+              {t('catalog.selected.calculateEase')}
             </button>
           )}
         </div>
@@ -166,11 +159,14 @@ export default function CatalogPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-[#F0EDE8] rounded-xl p-1">
-        {['MODÈLES', 'TISSUS'].map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${activeTab === tab ? 'bg-white shadow-sm text-[#D95D39]' : 'text-gray-400'}`}
-          >{tab}</button>
-        ))}
+        {['MODÈLES', 'TISSUS'].map((tab) => {
+          const tabLabel = tab === 'MODÈLES' ? t('catalog.tabs.patterns') : t('catalog.tabs.fabrics');
+          return (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${activeTab === tab ? 'bg-white shadow-sm text-[#D95D39]' : 'text-gray-400'}`}
+            >{tabLabel}</button>
+          );
+        })}
       </div>
 
       {error && <Toast type="error"   message={error} onClose={() => setError('')} />}
@@ -183,24 +179,24 @@ export default function CatalogPage() {
           <div className="flex gap-2 overflow-x-auto pb-1">
             <button onClick={() => handleCatChange('')}
               className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${!catFilter ? 'bg-[#D95D39] text-white border-[#D95D39]' : 'bg-white text-gray-500 border-[#E8E4DF]'}`}
-            >Tous</button>
+            >{t('catalog.filters.all')}</button>
             {categories.map((c) => (
               <button key={c.category_id} onClick={() => handleCatChange(c.category_id)}
                 className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${catFilter === c.category_id ? 'bg-[#D95D39] text-white border-[#D95D39]' : 'bg-white text-gray-500 border-[#E8E4DF]'}`}
               >{c.category_name}</button>
             ))}
           </div>
-          <SearchBox value={fabSearch} onChange={setFabSearch} placeholder="Rechercher un tissu…" />
+          <SearchBox value={fabSearch} onChange={setFabSearch} placeholder={t('catalog.searchFabric')} />
           {fabLoad ? <Spinner /> : visibleFabrics.length === 0
-            ? <p className="text-center text-sm text-gray-400 py-8">Aucun tissu trouvé.</p>
+            ? <p className="text-center text-sm text-gray-400 py-8">{t('catalog.noFabricFound')}</p>
             : <div className="grid grid-cols-2 gap-3">
                 {visibleFabrics.map((f) => (
-                  <FabricCard key={f.fabric_id} fabric={f} onSelect={handleSelectFabric} selecting={selecting} onClick={() => setSelFabric(f)} />
+                  <FabricCard key={f.fabric_id} fabric={f} onSelect={handleSelectFabric} selecting={selecting} onClick={() => setSelFabric(f)} t={t} />
                 ))}
               </div>
           }
           {selFabric && (
-            <FabricDetail fabric={selFabric} onClose={() => setSelFabric(null)} onSelect={handleSelectFabric} selecting={selecting} />
+            <FabricDetail fabric={selFabric} onClose={() => setSelFabric(null)} onSelect={handleSelectFabric} selecting={selecting} t={t} locale={locale} />
           )}
         </>
       )}
@@ -210,25 +206,28 @@ export default function CatalogPage() {
         <>
           {/* Type filter pills */}
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {GARMENT_TYPES.map((t) => (
-              <button key={t} onClick={() => setTypeFilter(t)}
-                className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${typeFilter === t ? 'bg-[#D95D39] text-white border-[#D95D39]' : 'bg-white text-gray-500 border-[#E8E4DF]'}`}
-              >{TYPE_LABELS[t] ?? t}</button>
-            ))}
+            {GARMENT_TYPES.map((type) => {
+              const label = t(`types.${type || 'Tous'}`);
+              return (
+                <button key={type} onClick={() => setTypeFilter(type)}
+                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${typeFilter === type ? 'bg-[#D95D39] text-white border-[#D95D39]' : 'bg-white text-gray-500 border-[#E8E4DF]'}`}
+                >{label}</button>
+              );
+            })}
           </div>
-          <SearchBox value={modSearch} onChange={setModSearch} placeholder="Rechercher un modèle…" />
+          <SearchBox value={modSearch} onChange={setModSearch} placeholder={t('catalog.searchPattern')} />
           {modLoad ? <Spinner /> : visibleModels.length === 0
-            ? <p className="text-center text-sm text-gray-400 py-8">Aucun modèle trouvé.</p>
+            ? <p className="text-center text-sm text-gray-400 py-8">{t('catalog.noPatternFound')}</p>
             : <div className="grid grid-cols-2 gap-3">
                 {visibleModels.map((m) => (
-                  <ModelCard key={m.model_id} model={m} onClick={() => openModelDetail(m)} />
+                  <ModelCard key={m.model_id} model={m} onClick={() => openModelDetail(m)} t={t} />
                 ))}
               </div>
           }
           {selModel && (
             <ModelDetail model={selModel} detail={selModelDet} loading={modDetLoad}
               onClose={() => { setSelModel(null); setSelModelDet(null); }}
-              onSelectModel={handleSelectModel} />
+              onSelectModel={handleSelectModel} t={t} />
           )}
         </>
       )}
@@ -250,7 +249,7 @@ function SearchBox({ value, onChange, placeholder }) {
   );
 }
 
-function FabricCard({ fabric, onSelect, selecting, onClick }) {
+function FabricCard({ fabric, onSelect, selecting, onClick, t }) {
   const isAvailable = fabric.fabric_status === 'available';
   const imgSrc = fabric.fabric_photo || FALLBACK_IMG;
   return (
@@ -259,7 +258,9 @@ function FabricCard({ fabric, onSelect, selecting, onClick }) {
         <img src={imgSrc} alt={fabric.fabric_name} className="w-full h-full object-cover"
           onError={(e) => { e.currentTarget.src = FALLBACK_IMG; }} />
         {isAvailable && (
-          <span className="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#4E6E58] text-white">Souple</span>
+          <span className="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#4E6E58] text-white">
+            {t('catalog.fabricCard.soft')}
+          </span>
         )}
       </div>
       <div className="p-3 flex flex-col gap-1 flex-1">
@@ -269,14 +270,14 @@ function FabricCard({ fabric, onSelect, selecting, onClick }) {
         <button onClick={(e) => { e.stopPropagation(); onSelect(fabric); }} disabled={selecting || !isAvailable}
           className="w-full mt-1 py-2 rounded-xl text-xs font-bold text-white disabled:opacity-40 transition"
           style={{ background: isAvailable ? '#D95D39' : '#ccc' }}>
-          Choisir ce tissu
+          {t('catalog.fabricCard.chooseBtn')}
         </button>
       </div>
     </div>
   );
 }
 
-function FabricDetail({ fabric, onClose, onSelect, selecting }) {
+function FabricDetail({ fabric, onClose, onSelect, selecting, t, locale }) {
   const imgSrc = fabric.fabric_photo || FALLBACK_IMG;
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -289,14 +290,16 @@ function FabricDetail({ fabric, onClose, onSelect, selecting }) {
         <img src={imgSrc} alt={fabric.fabric_name} className="w-full h-44 object-cover rounded-2xl"
           onError={(e) => { e.currentTarget.src = FALLBACK_IMG; }} />
         <p className="text-sm text-gray-600 leading-relaxed">
-          {fabric.fabric_composition ? `Tissu doux et lumineux avec un beau tombé fluide. Composition ${fabric.fabric_composition.toLowerCase()}.` : 'Tissu de haute qualité.'}
+          {fabric.fabric_composition
+            ? (locale === 'en' ? `Soft and bright fabric with a beautiful fluid drape. Composition ${fabric.fabric_composition.toLowerCase()}.` : `Tissu doux et lumineux avec un beau tombé fluide. Composition ${fabric.fabric_composition.toLowerCase()}.`)
+            : (locale === 'en' ? 'High quality fabric.' : 'Tissu de haute qualité.')}
         </p>
         <div className="grid grid-cols-2 gap-3">
           {[
-            ['Composition', fabric.fabric_composition ?? '—'],
-            ['Élasticité',  fabric.fabric_elasticity_rate != null ? `${fabric.fabric_elasticity_rate}%` : '—'],
-            ['Poids',       fabric.fabric_weight ? `${fabric.fabric_weight} g/m²` : '—'],
-            ['Prix',        `${fabric.fabric_unit_price?.toLocaleString('fr-FR')} FCFA/m`],
+            [t('catalog.fabricDetail.composition'), fabric.fabric_composition ?? '—'],
+            [t('catalog.fabricDetail.elasticity'),  fabric.fabric_elasticity_rate != null ? `${fabric.fabric_elasticity_rate}%` : '—'],
+            [t('catalog.fabricDetail.weight'),       fabric.fabric_weight ? `${fabric.fabric_weight} g/m²` : '—'],
+            [t('catalog.fabricDetail.price'),        `${fabric.fabric_unit_price?.toLocaleString('fr-FR')} FCFA/m`],
           ].map(([label, val]) => (
             <div key={label} className="bg-[#FDFBF7] rounded-2xl p-3">
               <p className="text-xs text-gray-400">{label}</p>
@@ -307,14 +310,14 @@ function FabricDetail({ fabric, onClose, onSelect, selecting }) {
         <button onClick={() => { onSelect(fabric); onClose(); }} disabled={selecting || fabric.fabric_status !== 'available'}
           className="w-full py-3.5 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
           style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}>
-          Choisir ce tissu
+          {t('catalog.fabricDetail.chooseBtn')}
         </button>
       </div>
     </div>
   );
 }
 
-function ModelCard({ model, onClick }) {
+function ModelCard({ model, onClick, t }) {
   const imgSrc = model.photo_url || FALLBACK_IMG;
   return (
     <button onClick={onClick} className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] overflow-hidden text-left hover:shadow-md transition flex flex-col">
@@ -325,18 +328,18 @@ function ModelCard({ model, onClick }) {
       <div className="p-3 flex flex-col gap-1 flex-1">
         <p className="text-sm font-semibold text-gray-900 leading-tight">{model.model_name}</p>
         <div className="flex flex-wrap gap-1 mt-0.5">
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#D95D39]/10 text-[#D95D39] font-medium">{model.garment_type}</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#D95D39]/10 text-[#D95D39] font-medium">{t(`types.${model.garment_type}`)}</span>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F0EDE8] text-gray-500 font-medium">{model.cut_type}</span>
         </div>
         <button className="w-full mt-auto py-2 rounded-xl text-xs font-bold text-white" style={{ background: '#D95D39' }}>
-          Voir le modèle
+          {t('catalog.modelCard.viewBtn')}
         </button>
       </div>
     </button>
   );
 }
 
-function ModelDetail({ model, detail, loading, onClose, onSelectModel }) {
+function ModelDetail({ model, detail, loading, onClose, onSelectModel, t }) {
   const imgSrc = (detail?.photo_url || model.photo_url) || FALLBACK_IMG;
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
@@ -352,12 +355,12 @@ function ModelDetail({ model, detail, loading, onClose, onSelectModel }) {
           <>
             {detail.description && <p className="text-sm text-gray-500">{detail.description}</p>}
             <div className="flex flex-wrap gap-1.5">
-              <span className="px-3 py-1 rounded-full bg-[#D95D39]/10 text-[#D95D39] text-xs font-semibold">{detail.garment_type}</span>
+              <span className="px-3 py-1 rounded-full bg-[#D95D39]/10 text-[#D95D39] text-xs font-semibold">{t(`types.${detail.garment_type}`)}</span>
               <span className="px-3 py-1 rounded-full bg-[#F0EDE8] text-gray-600 text-xs font-medium">{detail.cut_type}</span>
             </div>
             {detail.zones?.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 mb-2">Morphologies recommandées</p>
+                <p className="text-xs font-semibold text-gray-500 mb-2">{t('catalog.modelDetail.recommendedShapes')}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {detail.zones.map((z) => (
                     <span key={z.zone_id} className="px-2.5 py-1 rounded-full bg-[#D95D39]/10 text-[#D95D39] text-xs font-medium">{z.zone_name}</span>
@@ -367,7 +370,7 @@ function ModelDetail({ model, detail, loading, onClose, onSelectModel }) {
             )}
             {detail.fabrics?.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 mb-2">Tissus compatibles</p>
+                <p className="text-xs font-semibold text-gray-500 mb-2">{t('catalog.modelDetail.compatibleFabrics')}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {detail.fabrics.map((f) => (
                     <span key={f.fabric_id} className="px-2.5 py-1 rounded-full bg-[#FDFBF7] border border-[#E8E4DF] text-gray-600 text-xs">{f.fabric_name}</span>
@@ -383,7 +386,7 @@ function ModelDetail({ model, detail, loading, onClose, onSelectModel }) {
           className="w-full py-3.5 rounded-2xl text-sm font-bold text-white"
           style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
         >
-          Choisir ce patron ✓
+          {t('catalog.modelDetail.chooseBtn')}
         </button>
       </div>
     </div>
