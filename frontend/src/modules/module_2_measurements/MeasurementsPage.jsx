@@ -1,379 +1,456 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  createSession, listSessions, getSessionStatus,
-  setStature, triggerProcess, uploadPhoto,
+  createSession,
+  uploadPhoto,
+  setStature,
+  triggerProcess,
+  getSessionStatus,
+  listSessions,
 } from '../../api/modules';
 import { useFlow } from '../../context/FlowContext';
 import { useLanguage } from '../../context/LanguageContext';
 
-const STATUS_CONFIG = {
-  empty:      { color: 'bg-gray-100 text-gray-500',      dot: 'bg-gray-400' },
-  processing: { color: 'bg-blue-50 text-blue-600',       dot: 'bg-blue-500' },
-  success:    { color: 'bg-[#4E6E58]/10 text-[#4E6E58]', dot: 'bg-[#4E6E58]' },
-  failed:     { color: 'bg-red-50 text-red-600',         dot: 'bg-red-500' },
-};
+// ─── Constants ────────────────────────────────────────────────────────────────
+const POLL_INTERVAL_MS = 3000;
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function MeasurementsPage() {
   const navigate = useNavigate();
-  const { setFlow } = useFlow();
-  const { t, locale } = useLanguage();
+  const { flow, setFlow } = useFlow();
+  const { t } = useLanguage();
 
-  const [sessions,   setSessions]   = useState([]);
-  const [selected,   setSelected]   = useState(null);
-  const [stature,    setStatureVal] = useState('');
-  const [loading,    setLoading]    = useState(true);
-  const [creating,   setCreating]   = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [polling,    setPolling]    = useState(false);
-  const [error,      setError]      = useState('');
-  const [success,    setSuccess]    = useState('');
+  const [sessions,        setSessions]        = useState([]);
+  const [activeSession,   setActiveSession]   = useState(null);
+  const [sessionStatus,   setSessionStatus]   = useState(null);
+  const [statureValue,    setStatureValue]    = useState('');
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [launching,       setLaunching]       = useState(false);
+  const [uploadingFront,  setUploadingFront]  = useState(false);
+  const [uploadingProfile,setUploadingProfile]= useState(false);
+  const [polling,         setPolling]         = useState(false);
+  const [error,           setError]           = useState('');
+  const [info,            setInfo]            = useState('');
+  const [captureModal,    setCaptureModal]    = useState(null); // 'front' | 'profile' | null
+  const pollRef = useRef(null);
 
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'empty': return locale === 'en' ? 'Empty' : 'Vide';
-      case 'processing': return locale === 'en' ? 'Processing' : 'En traitement';
-      case 'success': return locale === 'en' ? 'Success' : 'Succès';
-      case 'failed': return locale === 'en' ? 'Failed' : 'Échoué';
-      default: return status;
-    }
-  };
-
-  // Photo upload state
-  const [photoFront,   setPhotoFront]   = useState(null); // File
-  const [photoSide,    setPhotoSide]    = useState(null); // File
-  const [uploadingF,   setUploadingF]   = useState(false);
-  const [uploadingS,   setUploadingS]   = useState(false);
-  const [uploadedF,    setUploadedF]    = useState(false);
-  const [uploadedS,    setUploadedS]    = useState(false);
-  const frontInputRef = useRef(null);
-  const sideInputRef  = useRef(null);
-
-  const loadStatus = async (id) => {
-    const res = await getSessionStatus(id);
-    setSelected(res.data);
-    return res.data;
-  };
-
-  const loadSessions = async () => {
-    setLoading(true);
-    try {
-      const res = await listSessions();
-      setSessions(res.data.sessions || []);
-      const active = (res.data.sessions || []).find((s) => s.is_active);
-      if (active) await loadStatus(active.session_id);
-    } catch {
-      setError(t('measurements.unableLoadSessions'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // ── Load sessions on mount ──────────────────────────────────────────────────
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadSessions();
+    (async () => {
+      try {
+        const res = await listSessions();
+        const list = res.data?.sessions || [];
+        setSessions(list);
+        // Restore active session from FlowContext if still valid
+        if (flow.sessionId) {
+          const match = list.find((s) => s.session_id === flow.sessionId);
+          if (match) {
+            setActiveSession(match);
+            // Fetch full status to get photo URLs and measurements
+            try {
+              const statusRes = await getSessionStatus(flow.sessionId);
+              setSessionStatus(statusRes.data);
+              // Resume polling if still processing
+              if (statusRes.data.status === 'processing') {
+                // startPolling is not available here yet — handled via a flag
+              }
+            } catch {
+              setSessionStatus(match);
+            }
+          }
+        }
+      } catch {
+        setError(t('measurements.unableLoadSessions'));
+      } finally {
+        setLoadingSessions(false);
+      }
+    })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleCreate = async () => {
-    setCreating(true); setError('');
-    setUploadedF(false); setUploadedS(false);
-    setPhotoFront(null); setPhotoSide(null);
+  // ── Polling ─────────────────────────────────────────────────────────────────
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setPolling(false);
+  }, []);
+
+  const startPolling = useCallback((sessionId) => {
+    stopPolling();
+    setPolling(true);
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await getSessionStatus(sessionId);
+        setSessionStatus(res.data);
+        if (res.data.status === 'success' || res.data.status === 'failed') {
+          stopPolling();
+        }
+      } catch { stopPolling(); }
+    }, POLL_INTERVAL_MS);
+  }, [stopPolling]);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  // ── Resume polling if restored session is still processing ─────────────────
+  useEffect(() => {
+    if (sessionStatus?.status === 'processing' && activeSession && !pollRef.current) {
+      startPolling(activeSession.session_id);
+    }
+  }, [sessionStatus?.status, activeSession, startPolling]);
+
+  // ── Start a new session (no API call yet — just open the capture flow) ──────
+  const handleStart = useCallback(async () => {
+    setError(''); setInfo('');
     try {
       const res = await createSession();
-      await loadSessions();
-      await loadStatus(res.data.session_id);
-      setSuccess(t('measurements.newSessionCreated'));
-    } catch { setError('Failed to create session.'); }
-    finally { setCreating(false); }
-  };
+      const sess = res.data;
+      setActiveSession(sess);
+      setSessionStatus(sess);
+      setFlow({ sessionId: sess.session_id });
+      setInfo(t('measurements.newSessionCreated'));
+    } catch (err) {
+      setError(err?.response?.data?.detail || t('common.error'));
+    }
+  }, [setFlow, t]);
 
-  const handlePhotoUpload = async (view, file) => {
-    if (!selected?.session_id || !file) return;
-    const setter = view === 'front' ? setUploadingF : setUploadingS;
-    const doneSetter = view === 'front' ? setUploadedF : setUploadedS;
+  // ── Upload a photo (from file or from camera blob) ──────────────────────────
+  const handlePhotoFile = useCallback(async (view, file) => {
+    if (!activeSession) return;
+    const setter = view === 'front' ? setUploadingFront : setUploadingProfile;
     setter(true); setError('');
     try {
-      await uploadPhoto(selected.session_id, view, file);
-      doneSetter(true);
-      setSuccess(view === 'front' ? t('measurements.frontPhotoUploaded') : t('measurements.sidePhotoUploaded'));
+      await uploadPhoto(activeSession.session_id, view, file);
+      setInfo(view === 'front' ? t('measurements.frontPhotoUploaded') : t('measurements.sidePhotoUploaded'));
+      // Refresh status to know which photos are uploaded
+      const res = await getSessionStatus(activeSession.session_id);
+      setSessionStatus(res.data);
     } catch (err) {
-      const d = err?.response?.data?.detail;
-      setError(typeof d === 'string' ? d : d?.message || `Error uploading photo ${view}.`);
+      const detail = err?.response?.data?.detail;
+      const msg = Array.isArray(detail)
+        ? detail.map((d) => d.message || d.msg).join(' ')
+        : (typeof detail === 'string' ? detail : t('common.error'));
+      setError(msg);
     } finally {
       setter(false);
     }
-  };
+  }, [activeSession, t]);
 
-  const handleProcess = async () => {
-    if (!selected?.session_id) return;
-    const st = parseFloat(stature);
-    if (!stature || isNaN(st) || st < 100 || st > 250) {
+  // ── Launch estimation ────────────────────────────────────────────────────────
+  const handleLaunch = useCallback(async () => {
+    if (!activeSession) return;
+    setError(''); setInfo('');
+    const stature = parseFloat(statureValue);
+    if (!statureValue || isNaN(stature) || stature < 100 || stature > 250) {
       setError(t('measurements.statureError')); return;
     }
-    setProcessing(true); setError('');
+    setLaunching(true);
     try {
-      await setStature(selected.session_id, st);
-      await triggerProcess(selected.session_id);
-      setSuccess(t('measurements.processingStarted'));
-      pollStatus(selected.session_id);
+      await setStature(activeSession.session_id, stature);
+      await triggerProcess(activeSession.session_id);
+      setInfo(t('measurements.processingStarted'));
+      startPolling(activeSession.session_id);
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      setError(Array.isArray(detail) ? detail.map((d) => d.msg).join(', ') : detail?.message || 'Failed to start.');
-    } finally { setProcessing(false); }
-  };
+      const msg = Array.isArray(detail)
+        ? detail.map((d) => d.message || d.msg || JSON.stringify(d)).join(' — ')
+        : (typeof detail === 'string' ? detail : t('common.error'));
+      setError(msg);
+    } finally {
+      setLaunching(false);
+    }
+  }, [activeSession, statureValue, startPolling, t]);
 
-  const pollStatus = (id) => {
-    setPolling(true);
-    const iv = setInterval(async () => {
-      try {
-        const data = await loadStatus(id);
-        if (data.status === 'success' || data.status === 'failed') {
-          clearInterval(iv); setPolling(false); await loadSessions();
-        }
-      } catch { clearInterval(iv); setPolling(false); }
-    }, 3000);
-  };
+  // ── Computed helpers ─────────────────────────────────────────────────────────
+  const hasFront   = Boolean(sessionStatus?.front_photo_url   ?? activeSession?.front_photo_url);
+  const hasProfile = Boolean(sessionStatus?.profile_photo_url ?? activeSession?.profile_photo_url);
+  const status     = sessionStatus?.status ?? activeSession?.status;
+  const canLaunch  = hasFront && hasProfile && status !== 'processing' && status !== 'success';
 
-  const handleContinue = () => {
-    // Enregistre l'ID de session dans le FlowContext avant de naviguer
-    setFlow({ sessionId: selected.session_id });
-    navigate('/modules/3');
-  };
+  // ── Landing screen (no active session) ──────────────────────────────────────
+  if (!activeSession) {
+    return (
+      <div className="space-y-5 max-w-lg mx-auto" style={{ background: '#FDFBF7', minHeight: '100vh' }}>
+        <div className="pt-2">
+          <h1 className="text-lg font-bold text-gray-900">{t('measurements.title')}</h1>
+          <p className="text-xs text-gray-400 mt-0.5">{t('measurements.subtitle')}</p>
+        </div>
 
-  if (loading) return <Spinner />;
-  const m = selected?.measurements;
-
-  return (
-    <div className="space-y-5 max-w-lg mx-auto">
-      {/* Steps banner */}
-      <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5">
-        <h1 className="text-lg font-bold text-gray-900 mb-1">{t('measurements.title')}</h1>
-        <p className="text-xs text-gray-400 mb-4">{t('measurements.subtitle')}</p>
-        <div className="space-y-3">
+        {/* Tips */}
+        <div className="grid grid-cols-3 gap-3">
           {[
-            { icon: '🧍', title: t('measurements.tips.straight.title'), desc: t('measurements.tips.straight.desc') },
-            { icon: '👕', title: t('measurements.tips.fitting.title'), desc: t('measurements.tips.fitting.desc') },
-            { icon: '📱', title: t('measurements.tips.waist.title'), desc: t('measurements.tips.waist.desc') },
-          ].map(({ icon, title, desc }) => (
-            <div key={title} className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#FAF8F5] flex items-center justify-center text-lg shrink-0">{icon}</div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800">{title}</p>
-                <p className="text-xs text-gray-400">{desc}</p>
-              </div>
+            { key: 'straight',  icon: '🧍' },
+            { key: 'fitting',   icon: '👕' },
+            { key: 'waist',     icon: '📱' },
+          ].map(({ key, icon }) => (
+            <div key={key} className="bg-white rounded-2xl border border-[#F0EDE8] p-3 text-center shadow-sm">
+              <div className="text-2xl mb-1">{icon}</div>
+              <p className="text-xs font-semibold text-gray-800">{t(`measurements.tips.${key}.title`)}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{t(`measurements.tips.${key}.desc`)}</p>
             </div>
           ))}
         </div>
+
+        {error && <Toast type="error" message={error} onClose={() => setError('')} />}
+
+        {/* CTA */}
         <button
-          onClick={handleCreate}
-          disabled={creating}
-          className="w-full mt-4 rounded-2xl py-3.5 text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-60"
+          onClick={handleStart}
+          className="w-full py-4 rounded-2xl text-sm font-bold text-white shadow-md"
           style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
         >
-          {creating ? '…' : <>{t('measurements.btnStart')} <span>→</span></>}
+          {t('measurements.btnStart')}
+        </button>
+
+        {/* Past sessions */}
+        {loadingSessions ? <Spinner /> : sessions.length > 0 && (
+          <div className="bg-white rounded-2xl border border-[#F0EDE8] p-4 shadow-sm">
+            <h2 className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">{t('measurements.captureSessions')}</h2>
+            <div className="space-y-2">
+              {sessions.map((s) => (
+                <button key={s.session_id} onClick={() => { setActiveSession(s); setSessionStatus(s); setFlow({ sessionId: s.session_id }); }}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-[#FDFBF7] border border-[#F0EDE8] hover:border-[#D95D39]/40 transition">
+                  <span className="text-xs text-gray-600">{new Date(s.created_at).toLocaleDateString()}</span>
+                  <StatusBadge status={s.status} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Active session screen ────────────────────────────────────────────────────
+  return (
+    <div className="space-y-4 max-w-lg mx-auto" style={{ background: '#FDFBF7', minHeight: '100vh' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between pt-1">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">{t('measurements.sessionDetail')}</h1>
+          <StatusBadge status={status} />
+        </div>
+        <button onClick={() => { setActiveSession(null); setSessionStatus(null); setFlow({ sessionId: null }); stopPolling(); }}
+          className="text-xs text-gray-400 underline underline-offset-2">
+          ← {t('measurements.btnStart')}
         </button>
       </div>
 
-      {error   && <Toast type="error"   message={error}   onClose={() => setError('')} />}
-      {success && <Toast type="success" message={success} onClose={() => setSuccess('')} />}
+      {error && <Toast type="error"   message={error}   onClose={() => setError('')} />}
+      {info  && <Toast type="success" message={info}    onClose={() => setInfo('')}  />}
 
-      {sessions.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">{t('measurements.captureSessions')}</h2>
-          <div className="space-y-2">
-            {sessions.map((s) => {
-              const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.empty;
-              return (
-                <button
-                  key={s.session_id}
-                  onClick={() => loadStatus(s.session_id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left transition ${
-                    selected?.session_id === s.session_id
-                      ? 'border-[#D95D39]/30 bg-[#D95D39]/5'
-                      : 'border-[#F0EDE8] hover:border-[#E8E4DF]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                    <span className="text-sm text-gray-700 font-medium">
-                      {new Date(s.created_at).toLocaleDateString(locale === 'en' ? 'en-US' : 'fr-FR')}
-                      {s.is_active && <span className="ml-2 text-xs text-[#D95D39]">({t('common.active')})</span>}
-                    </span>
-                  </div>
-                  <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${cfg.color}`}>{getStatusLabel(s.status)}</span>
-                </button>
-              );
-            })}
-          </div>
+      {/* Success state */}
+      {status === 'success' && sessionStatus?.measurements && (
+        <MeasurementResults measurements={sessionStatus.measurements} t={t} onContinue={() => navigate('/modules/3')} />
+      )}
+
+      {/* Failed state */}
+      {status === 'failed' && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-1">
+          <p className="text-sm font-semibold text-red-700">{t('measurements.failureReason')}</p>
+          <p className="text-xs text-red-600">{sessionStatus?.failure_reason || '—'}</p>
         </div>
       )}
 
-      {selected && (
-        <div className="bg-white rounded-2xl shadow-sm border border-[#F0EDE8] p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">{t('measurements.sessionDetail')}</h2>
-            {polling && (
-              <span className="flex items-center gap-1.5 text-xs text-blue-500">
-                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                {t('measurements.analyzing')}
-              </span>
-            )}
-          </div>
-
-          {(selected.status === 'empty' || selected.status === 'failed') && (
-            <div className="space-y-4">
-              <p className="text-xs text-gray-500">
-                {t('measurements.instructions')}
-              </p>
-
-              {selected.status === 'failed' && selected.failure_reason && (
-                <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">
-                  {t('measurements.failureReason')} {selected.failure_reason}
-                </p>
-              )}
-
-              {/* Photo uploads */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Photo face */}
-                <div>
-                  <input
-                    ref={frontInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) { setPhotoFront(f); handlePhotoUpload('front', f); }
-                    }}
-                  />
-                  <button
-                    onClick={() => frontInputRef.current?.click()}
-                    disabled={uploadingF}
-                    className={`w-full rounded-xl border-2 border-dashed py-4 flex flex-col items-center gap-1.5 text-xs font-medium transition ${
-                      uploadedF
-                        ? 'border-[#4E6E58] bg-[#4E6E58]/5 text-[#4E6E58]'
-                        : 'border-[#E8E4DF] text-gray-400 hover:border-[#D95D39] hover:text-[#D95D39]'
-                    }`}
-                  >
-                    {uploadingF ? (
-                      <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    ) : uploadedF ? (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                      </svg>
-                    )}
-                    {uploadedF ? `${t('measurements.frontPhoto')} ✓` : photoFront ? photoFront.name.slice(0, 12) + '…' : t('measurements.frontPhoto')}
-                  </button>
-                </div>
-
-                {/* Photo profil */}
-                <div>
-                  <input
-                    ref={sideInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) { setPhotoSide(f); handlePhotoUpload('side', f); }
-                    }}
-                  />
-                  <button
-                    onClick={() => sideInputRef.current?.click()}
-                    disabled={uploadingS}
-                    className={`w-full rounded-xl border-2 border-dashed py-4 flex flex-col items-center gap-1.5 text-xs font-medium transition ${
-                      uploadedS
-                        ? 'border-[#4E6E58] bg-[#4E6E58]/5 text-[#4E6E58]'
-                        : 'border-[#E8E4DF] text-gray-400 hover:border-[#D95D39] hover:text-[#D95D39]'
-                    }`}
-                  >
-                    {uploadingS ? (
-                      <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    ) : uploadedS ? (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                      </svg>
-                    )}
-                    {uploadedS ? `${t('measurements.sidePhoto')} ✓` : photoSide ? photoSide.name.slice(0, 12) + '…' : t('measurements.sidePhoto')}
-                  </button>
-                </div>
-              </div>
-
-              {/* Stature + lancer */}
-              <div className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('measurements.height')}</label>
-                  <input
-                    type="number"
-                    min={100}
-                    max={250}
-                    value={stature}
-                    onChange={(e) => setStatureVal(e.target.value)}
-                    placeholder={locale === 'en' ? 'e.g. 170' : 'Ex: 170'}
-                    className="w-full rounded-xl border border-[#E8E4DF] px-4 py-3 text-sm focus:outline-none focus:border-[#D95D39] bg-white"
-                  />
-                </div>
-                <button
-                  onClick={handleProcess}
-                  disabled={processing || polling}
-                  className="px-5 py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                  style={{ background: '#D95D39' }}
-                >
-                  {processing ? '…' : t('measurements.processBtn')}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {selected.status === 'success' && m && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-5 h-5 rounded-full bg-[#4E6E58] flex items-center justify-center text-white text-xs">✓</span>
-                <p className="text-sm font-semibold text-[#4E6E58]">{t('measurements.estimatedMeasurements')}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  [t('measurements.chest'), m.tour_poitrine_cm],
-                  [t('measurements.waist'), m.tour_taille_cm],
-                  [t('measurements.hips'), m.tour_hanches_cm],
-                  [t('measurements.arm'), m.longueur_bras_cm],
-                  [t('measurements.height'), m.hauteur_cm],
-                ].map(([label, val]) => (
-                  <div key={label} className="bg-[#FAF8F5] rounded-xl p-3 flex items-center justify-between">
-                    <p className="text-xs text-gray-400">{label}</p>
-                    <p className="text-sm font-bold text-gray-900">
-                      {val ?? '—'} <span className="text-xs font-normal text-gray-400">cm</span>
-                    </p>
-                  </div>
-                ))}
-              </div>
-              {/* Bouton "Continuer" — maintenant fonctionnel */}
-              <button
-                onClick={handleContinue}
-                className="w-full mt-4 rounded-2xl py-3.5 text-sm font-bold text-white flex items-center justify-center gap-2"
-                style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
-              >
-                {t('measurements.chooseFabricPattern')}
-              </button>
-            </div>
-          )}
+      {/* Processing state */}
+      {(status === 'processing' || polling) && (
+        <div className="bg-white border border-[#F0EDE8] rounded-2xl p-5 flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-[#F0EDE8] border-t-[#D95D39] rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">{t('measurements.analyzing')}</p>
         </div>
       )}
 
-      {sessions.length === 0 && !loading && (
-        <div className="text-center py-12 text-gray-400">
-          <p className="text-sm">{t('measurements.noSessions')}</p>
+      {/* Photo capture cards */}
+      {status !== 'success' && (
+        <div className="grid grid-cols-2 gap-3">
+          <PhotoSlot
+            label={t('measurements.frontPhoto')}
+            hasPhoto={hasFront}
+            uploading={uploadingFront}
+            onCapture={() => setCaptureModal('front')}
+          />
+          <PhotoSlot
+            label={t('measurements.sidePhoto')}
+            hasPhoto={hasProfile}
+            uploading={uploadingProfile}
+            onCapture={() => setCaptureModal('profile')}
+          />
         </div>
+      )}
+
+      {/* Stature + launch */}
+      {status !== 'success' && status !== 'processing' && (
+        <div className="bg-white rounded-2xl border border-[#F0EDE8] p-4 shadow-sm space-y-3">
+          <label className="block text-xs font-medium text-gray-500">{t('measurements.height')}</label>
+          <input type="number" min={100} max={250} placeholder="170"
+            value={statureValue} onChange={(e) => setStatureValue(e.target.value)}
+            className="w-full rounded-xl border border-[#E8E4DF] px-4 py-2.5 text-sm focus:outline-none focus:border-[#D95D39] bg-white" />
+          <button onClick={handleLaunch} disabled={!canLaunch || launching}
+            className="w-full py-3.5 rounded-2xl text-sm font-bold text-white disabled:opacity-40 transition"
+            style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}>
+            {launching ? t('measurements.processingBtn') : t('measurements.processBtn')}
+          </button>
+        </div>
+      )}
+
+      {/* Capture modal */}
+      {captureModal && (
+        <CaptureModal
+          view={captureModal}
+          t={t}
+          onFile={(file) => { handlePhotoFile(captureModal, file); setCaptureModal(null); }}
+          onClose={() => setCaptureModal(null)}
+        />
       )}
     </div>
+  );
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+/** Card representing one photo slot (front or profile). */
+function PhotoSlot({ label, hasPhoto, uploading, onCapture }) {
+  return (
+    <button onClick={onCapture} disabled={uploading}
+      className={`bg-white rounded-2xl border p-4 flex flex-col items-center gap-2 shadow-sm transition hover:shadow-md ${hasPhoto ? 'border-[#4E6E58]/40' : 'border-[#F0EDE8]'}`}>
+      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${hasPhoto ? 'bg-[#4E6E58]/10' : 'bg-[#F5F0EA]'}`}>
+        {uploading ? (
+          <div className="w-5 h-5 border-2 border-[#D95D39] border-t-transparent rounded-full animate-spin" />
+        ) : hasPhoto ? '✅' : '📷'}
+      </div>
+      <p className="text-xs font-semibold text-gray-700 text-center leading-tight">{label}</p>
+      {hasPhoto && <p className="text-[10px] text-[#4E6E58] font-medium">✓ ajoutée</p>}
+    </button>
+  );
+}
+
+/**
+ * Modal that offers the user two options per photo view:
+ *   1. Take a photo with the camera (via <input capture="environment">)
+ *   2. Upload an existing file from their device
+ */
+function CaptureModal({ view, t, onFile, onClose }) {
+  const { locale } = useLanguage();
+  const cameraRef = useRef(null);
+  const fileRef   = useRef(null);
+
+  const handleChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) onFile(file);
+    e.target.value = '';
+  };
+
+  const label = view === 'front' ? t('measurements.frontPhoto') : t('measurements.sidePhoto');
+  const isFr  = locale === 'fr';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        {/* Handle */}
+        <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto sm:hidden" />
+
+        <h3 className="text-base font-bold text-gray-900 text-center">{label}</h3>
+        <p className="text-xs text-gray-400 text-center">
+          {isFr ? 'Comment souhaitez-vous ajouter cette photo ?' : 'How would you like to add this photo?'}
+        </p>
+
+        {/* Option 1 — Camera */}
+        <button
+          onClick={() => cameraRef.current?.click()}
+          className="w-full flex items-center gap-4 p-4 rounded-2xl border border-[#F0EDE8] bg-[#FDFBF7] hover:border-[#D95D39]/40 transition">
+          <div className="w-10 h-10 rounded-full bg-[#D95D39]/10 flex items-center justify-center text-xl">📸</div>
+          <div className="text-left">
+            <p className="text-sm font-semibold text-gray-800">
+              {isFr ? 'Prendre une photo' : 'Take a photo'}
+            </p>
+            <p className="text-xs text-gray-400">
+              {isFr ? 'Utiliser directement la caméra' : 'Use your camera directly'}
+            </p>
+          </div>
+        </button>
+        {/* hidden camera input */}
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleChange} />
+
+        {/* Divider */}
+        <div className="flex items-center gap-2 text-gray-300">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-xs">{t('common.or')}</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+
+        {/* Option 2 — File upload */}
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="w-full flex items-center gap-4 p-4 rounded-2xl border border-[#F0EDE8] bg-[#FDFBF7] hover:border-[#D95D39]/40 transition">
+          <div className="w-10 h-10 rounded-full bg-[#4E6E58]/10 flex items-center justify-center text-xl">🖼️</div>
+          <div className="text-left">
+            <p className="text-sm font-semibold text-gray-800">
+              {isFr ? 'Téléverser une photo' : 'Upload a photo'}
+            </p>
+            <p className="text-xs text-gray-400">
+              {isFr ? 'Choisir depuis la galerie' : 'Choose from your gallery'}
+            </p>
+          </div>
+        </button>
+        {/* hidden file input */}
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={handleChange} />
+
+        {/* Cancel */}
+        <button onClick={onClose} className="w-full py-3 rounded-2xl text-sm font-medium text-gray-400 bg-[#F5F0EA]">
+          {t('common.close')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Displays the estimated measurements once the session succeeds. */
+function MeasurementResults({ measurements, t, onContinue }) {
+  const rows = [
+    { label: t('measurements.chest'), value: measurements.bust_cm },
+    { label: t('measurements.waist'), value: measurements.waist_cm },
+    { label: t('measurements.hips'),  value: measurements.hips_cm },
+  ];
+  return (
+    <div className="bg-white rounded-2xl border border-[#4E6E58]/30 p-5 shadow-sm space-y-4">
+      <h2 className="text-sm font-semibold text-[#3A5242]">{t('measurements.estimatedMeasurements')}</h2>
+
+      {/* Silhouette badge */}
+      {measurements.silhouette_code && (
+        <span className="inline-block px-3 py-1 rounded-full bg-[#D95D39]/10 text-[#D95D39] text-xs font-bold">
+          {measurements.silhouette_code}
+        </span>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
+        {rows.map(({ label, value }) => (
+          <div key={label} className="bg-[#FDFBF7] rounded-2xl p-3 text-center border border-[#F0EDE8]">
+            <p className="text-lg font-extrabold text-gray-900">{Number(value).toFixed(1)}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">cm</p>
+            <p className="text-[10px] font-medium text-gray-600 mt-1 leading-tight">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={onContinue}
+        className="w-full py-3.5 rounded-2xl text-sm font-bold text-white"
+        style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}>
+        {t('measurements.chooseFabricPattern')}
+      </button>
+    </div>
+  );
+}
+
+/** Small colored badge showing session status. */
+function StatusBadge({ status }) {
+  const map = {
+    empty:      { bg: 'bg-gray-100',       text: 'text-gray-500',   label: 'Vide' },
+    processing: { bg: 'bg-yellow-50',      text: 'text-yellow-600', label: 'En cours' },
+    success:    { bg: 'bg-[#4E6E58]/10',   text: 'text-[#3A5242]',  label: 'Succès' },
+    failed:     { bg: 'bg-red-50',         text: 'text-red-600',    label: 'Échec' },
+  };
+  const s = map[status] || map.empty;
+  return (
+    <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>
+      {s.label}
+    </span>
   );
 }
 
@@ -385,14 +462,14 @@ function Toast({ type, message, onClose }) {
   return (
     <div className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm ${s[type]}`}>
       <span>{message}</span>
-      <button onClick={onClose} className="ml-4 font-bold opacity-60 hover:opacity-100">×</button>
+      <button onClick={onClose} className="ml-4 font-bold opacity-60">×</button>
     </div>
   );
 }
 
 function Spinner() {
   return (
-    <div className="flex items-center justify-center min-h-[40vh]">
+    <div className="flex items-center justify-center min-h-[20vh]">
       <div className="w-8 h-8 border-4 border-[#F0EDE8] border-t-[#D95D39] rounded-full animate-spin" />
     </div>
   );
