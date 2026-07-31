@@ -151,17 +151,17 @@ class Model(Base):
     description = Column(Text, nullable=True)
     photo_url = Column(String(255), nullable=False)
     garment_type = Column(
-        SAEnum(GarmentTypeEnum, name="garment_type_enum", create_type=False),
+        String(50),
         nullable=False,
     )
     cut_type = Column(
-        SAEnum(CutTypeEnum, name="cut_type_enum", create_type=False),
+        String(20),
         nullable=False,
     )
     status = Column(
-        SAEnum(ModelStatusEnum, name="model_status_enum", create_type=False),
+        String(20),
         nullable=False,
-        default=ModelStatusEnum.Draft,
+        default="Draft",
         server_default="Draft",
     )
     version = Column(Integer, nullable=False, default=1, server_default="1")

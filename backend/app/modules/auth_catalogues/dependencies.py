@@ -23,8 +23,8 @@ from typing import Literal, Optional
 
 # ── Module 3 ──────────────────────────────────────────────────────────────────
 
-# The two recognised role values for Module 3.
-RoleType = Literal["client", "catalog_manager"]
+# The recognised role values for Module 3 and 4.
+RoleType = Literal["client", "catalog_manager", "administrator"]
 
 
 async def get_current_role(x_user_role: Optional[str] = Header(None)) -> RoleType:
@@ -41,15 +41,15 @@ async def get_current_role(x_user_role: Optional[str] = Header(None)) -> RoleTyp
             unrecognised value.
 
     Returns:
-        The validated role string ("client" or "catalog_manager").
+        The validated role string ("client", "catalog_manager", or "administrator").
     """
-    if x_user_role is None or x_user_role not in ("client", "catalog_manager"):
+    if x_user_role is None or x_user_role not in ("client", "catalog_manager", "administrator"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return x_user_role  # type: ignore[return-value]
 
 
-def require_role(required: RoleType):
-    """Return a FastAPI dependency that enforces a specific role (Module 3).
+def require_role(required: RoleType | list[RoleType]):
+    """Return a FastAPI dependency that enforces a specific role or set of roles.
 
     Usage::
 
@@ -59,7 +59,8 @@ def require_role(required: RoleType):
         HTTPException 403: if the caller's role does not match *required*.
     """
     async def check(role: RoleType = Depends(get_current_role)) -> RoleType:
-        if role != required:
+        allowed = [required] if isinstance(required, str) else list(required)
+        if role not in allowed:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return role
 

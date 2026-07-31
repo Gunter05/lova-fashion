@@ -131,11 +131,11 @@ async def get_category(
 async def create_category(
     data: CategoryCreate,
     db: AsyncSession = Depends(get_db),
-    _role: str = Depends(require_role("catalog_manager")),
+    _role: str = Depends(require_role(["catalog_manager", "administrator"])),
 ) -> CategoryResponse:
     """Create a new fabric category.
 
-    Requires the ``catalog_manager`` role (HTTP 403 otherwise).
+    Requires the ``catalog_manager`` or ``administrator`` role (HTTP 403 otherwise).
     Returns HTTP 201 with the newly created category, including its generated
     ``category_id``.
     Implements Req 4 AC1–3, AC8.
@@ -153,13 +153,13 @@ async def update_category(
     category_id: UUID,
     data: CategoryUpdate,
     db: AsyncSession = Depends(get_db),
-    _role: str = Depends(require_role("catalog_manager")),
+    _role: str = Depends(require_role(["catalog_manager", "administrator"])),
 ) -> CategoryResponse:
     """Apply a partial update to the fabric category with the given *category_id*.
 
     Only the fields present in the request body are applied; omitted fields
     remain unchanged.
-    Requires the ``catalog_manager`` role (HTTP 403 otherwise).
+    Requires the ``catalog_manager`` or ``administrator`` role (HTTP 403 otherwise).
     Returns HTTP 404 if the category does not exist.
     Implements Req 4 AC4–5, AC8.
     """
@@ -180,7 +180,7 @@ async def update_category(
 async def delete_category(
     category_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _role: str = Depends(require_role("catalog_manager")),
+    _role: str = Depends(require_role(["catalog_manager", "administrator"])),
 ) -> Response:
     """Permanently delete the fabric category with the given *category_id*.
 
@@ -214,7 +214,7 @@ async def delete_category(
 async def list_fabrics(
     category_id: Optional[UUID] = Query(None),
     db: AsyncSession = Depends(get_db),
-    _role: str = Depends(require_role("client")),
+    _role: str = Depends(get_current_role),
 ) -> list[FabricSummary]:
     """Return all fabrics with ``fabric_status = available``.
 
@@ -245,7 +245,7 @@ async def list_fabrics(
 async def get_fabric(
     fabric_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _role: str = Depends(require_role("client")),
+    _role: str = Depends(get_current_role),
 ) -> FabricDetail:
     """Return the full detail of a fabric by its ``fabric_id``.
 
