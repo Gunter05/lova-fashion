@@ -14,7 +14,7 @@ export const uploadProfilePhoto = (file) => {
   const fd = new FormData();
   fd.append('file', file);
   return client.post('/api/v1/users/me/photos', fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: { 'Content-Type': undefined },
   });
 };
 export const getPhotoHistory = ()           => client.get('/api/v1/users/me/photos');
@@ -29,7 +29,7 @@ export const uploadPhoto      = (id, view, file) => {
   const fd = new FormData();
   fd.append('file', file);
   return client.put(`/api/v1/measurements/sessions/${id}/photos/${view}`, fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: { 'Content-Type': undefined },
   });
 };
 

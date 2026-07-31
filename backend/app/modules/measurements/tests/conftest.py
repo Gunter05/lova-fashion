@@ -150,8 +150,6 @@ def client(db_session):
     with (
         patch("app.modules.measurements.service._storage", mock_storage),
         patch("app.modules.measurements.service._estimator"),
-        patch("app.modules.measurements.service._decode_image", return_value=None),
-        patch("app.modules.measurements.service._run_pose", return_value=None),
         # Bypass MediaPipe body-presence check in upload_photo
         patch(
             "app.modules.measurements.service.CaptureSessionService.upload_photo",
