@@ -6,7 +6,7 @@ import { useLanguage } from '../../context/LanguageContext';
 
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=800';
 
-const GARMENT_TYPES = ['', 'Dress', 'Shirt', 'Trousers', 'Skirt', 'Jacket', 'Coat', 'Suit'];
+const GARMENT_TYPES = ['', 'Robe', 'Chemise', 'Pantalon', 'Jupe', 'Veste', 'Manteau', 'Costume'];
 
 export default function CatalogPage() {
   const navigate = useNavigate();

@@ -179,48 +179,6 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/debug/auth")
-async def debug_auth(request: Request):
-    """Temporary endpoint to diagnose JWT decoding issues."""
-    auth_header = request.headers.get("authorization", "")
-    x_user_role = request.headers.get("x-user-role", "MISSING")
-    x_user_id   = request.headers.get("x-user-id", "MISSING")
-
-    result: dict = {
-        "x_user_role": x_user_role,
-        "x_user_id": x_user_id,
-        "has_auth_header": bool(auth_header),
-    }
-
-    if auth_header.lower().startswith("bearer "):
-        token = auth_header[7:].strip()
-        try:
-            from app.modules.auth_user_profile.auth.security import decode_token, JWT_SECRET, JWT_ISSUER
-            payload = decode_token(token)
-            result["token_valid"] = True
-            result["token_role"]  = payload.get("role")
-            result["token_iss"]   = payload.get("iss")
-            result["expected_iss"] = JWT_ISSUER
-        except Exception as exc:
-            from app.modules.auth_user_profile.auth.security import JWT_SECRET, JWT_ISSUER
-            import jose.jwt as _jwt
-            try:
-                # Decode without verification to see the raw payload
-                raw = _jwt.get_unverified_claims(token)
-                result["token_valid"]   = False
-                result["decode_error"]  = str(exc)
-                result["raw_iss"]       = raw.get("iss")
-                result["expected_iss"]  = JWT_ISSUER
-                result["raw_role"]      = raw.get("role")
-                result["secret_length"] = len(JWT_SECRET)
-            except Exception as exc2:
-                result["token_valid"]  = False
-                result["decode_error"] = str(exc)
-                result["raw_error"]    = str(exc2)
-
-    return result
-
-
 # Module 1 — Auth & User Profile
 app.include_router(auth_user_profile_router, prefix="/api/v1")
 app.include_router(auth_user_profile_router, prefix="/auth-catalogues")
