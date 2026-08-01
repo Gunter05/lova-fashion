@@ -298,7 +298,15 @@ async def create_verification(
     if body.client_id is None:
         body = body.model_copy(update={"client_id": current_user})
 
-    return await CompatibilityService.verify(body, current_user, db)
+    import logging as _logging
+    try:
+        return await CompatibilityService.verify(body, current_user, db)
+    except Exception as exc:
+        import traceback as _tb
+        _logging.getLogger("lova_fashion_api").error(
+            "create_verification unhandled error:\n%s", _tb.format_exc()
+        )
+        raise
 
 
 # ---------------------------------------------------------------------------

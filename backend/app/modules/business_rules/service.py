@@ -429,6 +429,7 @@ from app.modules.business_rules.schemas import (
     CompatibilityRuleUpdate,
     CompatibilityRuleResponse,
     VerdictEvaluationResponse,
+    RiskZoneResponse,
 )
 from app.modules.auth_catalogues.models import (
     Model,
@@ -896,13 +897,9 @@ class CompatibilityService:
                 f"fabric_property={fabric_property}"
             )
             logger.error(
-                "Indeterminate evaluation — no rule found",
-                extra={
-                    "cut_type": cut_type,
-                    "fabric_property": fabric_property,
-                    "model_id": str(request.model_id),
-                    "fabric_id": str(request.fabric_id),
-                },
+                "Indeterminate evaluation — no rule found for cut_type=%s, fabric_property=%s, "
+                "model_id=%s, fabric_id=%s",
+                cut_type, fabric_property, str(request.model_id), str(request.fabric_id),
             )
             eval_data = dict(
                 evaluation_id=uuid.uuid4(),
@@ -916,7 +913,13 @@ class CompatibilityService:
                 morphology_id=request.morphology_id,
             )
             evaluation = await _persist_evaluation(eval_data, [], db)
-            return VerdictEvaluationResponse.model_validate(evaluation)
+            return VerdictEvaluationResponse(
+                evaluation_id=evaluation.evaluation_id,
+                global_status=evaluation.global_status,
+                created_at=evaluation.created_at,
+                fabric_recommendation=evaluation.fabric_recommendation,
+                risk_zones=[],
+            )
 
         # ── Phase 3 — Zone Evaluation (pure, no DB) ───────────────────
         zone_measurements = {
@@ -1002,7 +1005,27 @@ class CompatibilityService:
             morphology_id=request.morphology_id,
         )
         evaluation = await _persist_evaluation(eval_data, risk_zone_dicts, db)
-        return VerdictEvaluationResponse.model_validate(evaluation)
+
+        # Build response manually to avoid lazy-loading risk_zones outside async context
+        risk_zone_responses = [
+            RiskZoneResponse(
+                risk_id=rz.risk_id,
+                rule_id=rz.rule_id,
+                zone_id=rz.zone_id,
+                calculated_variance=float(rz.calculated_variance),
+                localized_verdict=rz.localized_verdict,
+                explanation=rz.explanation,
+                rule_version=rz.rule_version,
+            )
+            for rz in (evaluation.risk_zones or [])
+        ]
+        return VerdictEvaluationResponse(
+            evaluation_id=evaluation.evaluation_id,
+            global_status=evaluation.global_status,
+            created_at=evaluation.created_at,
+            fabric_recommendation=evaluation.fabric_recommendation,
+            risk_zones=risk_zone_responses,
+        )
 
     # ------------------------------------------------------------------
     # Task 5.4 — Rule administration methods
@@ -1120,6 +1143,7 @@ class CompatibilityService:
 
         Requirements: 10.4, 10.5
         """
+        from sqlalchemy import select as _sel
         evaluation: VerdictEvaluation | None = await db.get(
             VerdictEvaluation, evaluation_id
         )
@@ -1128,4 +1152,32 @@ class CompatibilityService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Évaluation {evaluation_id} introuvable.",
             )
-        return VerdictEvaluationResponse.model_validate(evaluation)
+        # Load risk_zones explicitly within the async session
+        from sqlalchemy.orm import selectinload as _sil
+        stmt = (
+            _sel(VerdictEvaluation)
+            .options(_sil(VerdictEvaluation.risk_zones))
+            .where(VerdictEvaluation.evaluation_id == evaluation_id)
+        )
+        result = await db.execute(stmt)
+        evaluation = result.scalars().first()
+
+        risk_zone_responses = [
+            RiskZoneResponse(
+                risk_id=rz.risk_id,
+                rule_id=rz.rule_id,
+                zone_id=rz.zone_id,
+                calculated_variance=float(rz.calculated_variance),
+                localized_verdict=rz.localized_verdict,
+                explanation=rz.explanation,
+                rule_version=rz.rule_version,
+            )
+            for rz in (evaluation.risk_zones or [])
+        ]
+        return VerdictEvaluationResponse(
+            evaluation_id=evaluation.evaluation_id,
+            global_status=evaluation.global_status,
+            created_at=evaluation.created_at,
+            fabric_recommendation=evaluation.fabric_recommendation,
+            risk_zones=risk_zone_responses,
+        )
