@@ -6,7 +6,6 @@
   "framework": "vite",
 
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://lova-fashion-api.onrender.com/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
 

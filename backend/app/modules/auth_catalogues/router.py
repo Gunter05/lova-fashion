@@ -286,7 +286,7 @@ async def get_fabric(
 async def select_fabric(
     fabric_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _role: str = Depends(require_role("client")),
+    _role: str = Depends(require_role(["client", "administrator"])),
 ) -> SelectionResponse:
     """Confirm a fabric selection for an order.
 
