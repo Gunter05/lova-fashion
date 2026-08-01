@@ -15,7 +15,6 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
-    ForeignKey,
     Index,
     String,
     Text,
@@ -57,27 +56,23 @@ class RapportMesure(Base):
     # ── Foreign keys ─────────────────────────────────────────────────────────
     user_id: uuid.UUID = Column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
         comment="UUID of the client who owns this report.",
     )
     adjustment_id: uuid.UUID = Column(
         UUID(as_uuid=True),
-        ForeignKey("measurement_adjustments.id", ondelete="RESTRICT"),
         nullable=False,
-        comment="FK to the Module 5 measurement_adjustments record used at generation time.",
+        comment="FK to the Module 5 measurement_adjustments record.",
     )
     fabric_id: uuid.UUID = Column(
         UUID(as_uuid=True),
-        ForeignKey("fabrics.fabric_id", ondelete="RESTRICT"),
         nullable=False,
         comment="FK to the fabrics record (Module 3).",
     )
     model_id: uuid.UUID = Column(
         UUID(as_uuid=True),
-        ForeignKey("models.model_id", ondelete="RESTRICT"),
         nullable=False,
-        comment="FK to the garment models record (Module 4).",
+        comment="FK to the garment model record (Module 4).",
     )
 
     # ── Verdict & advice ──────────────────────────────────────────────────────

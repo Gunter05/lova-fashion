@@ -913,6 +913,27 @@ class CompatibilityService:
                 morphology_id=request.morphology_id,
             )
             evaluation = await _persist_evaluation(eval_data, [], db)
+
+            # Publish event even for Indeterminate (no rules → treat as compatible)
+            try:
+                from app.modules.auth_user_profile.events.bus import event_bus
+                from datetime import timezone as _tz
+                import datetime as _dt
+                event_payload = {
+                    "type": "compatibility.evaluated",
+                    "emitted_at": _dt.datetime.now(_tz.utc).isoformat(),
+                    "user_id": str(request.client_id),
+                    "adjustment_id": str(request.adjustment_id),
+                    "fabric_id": str(request.fabric_id),
+                    "model_id": str(request.model_id),
+                    "verdict": "compatible",
+                    "advice": "Aucune règle de compatibilité configurée — combinaison acceptée par défaut.",
+                    "incompatible_zones": None,
+                }
+                await event_bus.publish("compatibility.evaluated", event_payload)
+            except Exception as _exc:
+                logger.warning("Failed to publish compatibility.evaluated (Indeterminate): %s", _exc)
+
             return VerdictEvaluationResponse(
                 evaluation_id=evaluation.evaluation_id,
                 global_status=evaluation.global_status,
@@ -1019,6 +1040,52 @@ class CompatibilityService:
             )
             for rz in (evaluation.risk_zones or [])
         ]
+
+        # Publish compatibility.evaluated → triggers Module 7 report creation
+        try:
+            from app.modules.auth_user_profile.events.bus import event_bus
+            from datetime import timezone as _tz
+            import datetime as _dt
+
+            # Map global_status → verdict expected by Module 7
+            _verdict_map = {
+                "Compatible": "compatible",
+                "Compatible_with_Reservations": "minor_adjustments",
+                "Incompatible": "incompatible",
+                "Indeterminate": "compatible",
+                "Failed": "compatible",
+            }
+            verdict = _verdict_map.get(global_status, "compatible")
+
+            # Build advice text from risk zones
+            advice = (
+                " ".join(rz.explanation for rz in risk_zone_dicts)
+                if risk_zone_dicts else
+                "Votre combinaison tissu / patron / morphologie est compatible."
+            )
+
+            # Build incompatible_zones list
+            incompatible_zones = [
+                {"zone": rz.zone_name if hasattr(rz, "zone_name") else "—", "reason": rz.explanation}
+                for rz in risk_zone_dicts if rz.localized_verdict == "Incompatible"
+            ] or None
+
+            event_payload = {
+                "type": "compatibility.evaluated",
+                "emitted_at": _dt.datetime.now(_tz.utc).isoformat(),
+                "user_id": str(request.client_id),
+                "adjustment_id": str(request.adjustment_id),
+                "fabric_id": str(request.fabric_id),
+                "model_id": str(request.model_id),
+                "verdict": verdict,
+                "advice": advice,
+                "incompatible_zones": incompatible_zones,
+            }
+            await event_bus.publish("compatibility.evaluated", event_payload)
+        except Exception as _exc:
+            logger.warning("Failed to publish compatibility.evaluated: %s", _exc)
+            # Do not fail the request if the event publish fails
+
         return VerdictEvaluationResponse(
             evaluation_id=evaluation.evaluation_id,
             global_status=evaluation.global_status,
