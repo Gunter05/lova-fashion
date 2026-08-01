@@ -171,7 +171,8 @@ async def require_admin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not payload.get("is_admin"):
+    role = payload.get("role", "")
+    if not (payload.get("is_admin") or str(role).lower() in ("admin", "administrator")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
