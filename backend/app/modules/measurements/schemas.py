@@ -146,6 +146,14 @@ class SessionStatusResponse(BaseModel):
         None,
         description="Raw measurements and silhouette; populated when status is 'success'.",
     )
+    front_photo_url: str | None = Field(
+        None,
+        description="URL of the uploaded front photo, if present.",
+    )
+    profile_photo_url: str | None = Field(
+        None,
+        description="URL of the uploaded profile photo, if present.",
+    )
 
     model_config = {"from_attributes": True}
 

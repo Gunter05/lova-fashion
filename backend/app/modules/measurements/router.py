@@ -253,6 +253,8 @@ async def get_session_status(
         retry_allowed=data["retry_allowed"],
         failure_reason=data["failure_reason"],
         measurements=measurements,
+        front_photo_url=session.front_photo_url,
+        profile_photo_url=session.profile_photo_url,
     )
 
 
