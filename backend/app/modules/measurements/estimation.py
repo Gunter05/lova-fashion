@@ -134,21 +134,81 @@ def _decode_image(image_bytes: bytes, label: str) -> np.ndarray:
     return img
 
 
-def _run_pose(image_bgr: np.ndarray) -> mp.solutions.pose.PoseLandmark:  # type: ignore[name-defined]
+def _run_pose(image_bgr: np.ndarray):
     """
     Run MediaPipe Pose on a single image in static mode.
+    Compatible with both the legacy API (< 0.10.x) and the current API (0.10.x+).
     Returns the pose_landmarks object or None.
     """
-    pose = mp.solutions.pose.Pose(  # type: ignore[attr-defined]
-        static_image_mode=True,
-        model_complexity=1,
-        enable_segmentation=False,
-        min_detection_confidence=0.5,
-    )
     image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-    with pose:
-        results = pose.process(image_rgb)
-    return results.pose_landmarks
+
+    # Try legacy solutions API first (mediapipe < 0.10.x builds that still ship it)
+    try:
+        solutions = mp.solutions  # type: ignore[attr-defined]
+        pose = solutions.pose.Pose(
+            static_image_mode=True,
+            model_complexity=1,
+            enable_segmentation=False,
+            min_detection_confidence=0.5,
+        )
+        with pose:
+            results = pose.process(image_rgb)
+        return results.pose_landmarks
+
+    except AttributeError:
+        pass  # mp.solutions not available — fall through to Tasks API
+
+    # New Tasks API (mediapipe >= 0.10.x)
+    try:
+        from mediapipe.tasks import python as mp_python  # type: ignore[import]
+        from mediapipe.tasks.python import vision as mp_vision  # type: ignore[import]
+        from mediapipe.tasks.python.vision import RunningMode  # type: ignore[import]
+        import urllib.request, os, tempfile
+
+        # Download the pose landmarker model if not cached
+        model_path = os.path.join(tempfile.gettempdir(), "pose_landmarker_full.task")
+        if not os.path.exists(model_path):
+            model_url = (
+                "https://storage.googleapis.com/mediapipe-models/"
+                "pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"
+            )
+            urllib.request.urlretrieve(model_url, model_path)
+
+        base_options = mp_python.BaseOptions(model_asset_path=model_path)
+        options = mp_vision.PoseLandmarkerOptions(
+            base_options=base_options,
+            running_mode=RunningMode.IMAGE,
+            min_pose_detection_confidence=0.5,
+        )
+        with mp_vision.PoseLandmarker.create_from_options(options) as landmarker:
+            mp_image = mp.Image(  # type: ignore[attr-defined]
+                image_format=mp.ImageFormat.SRGB,  # type: ignore[attr-defined]
+                data=image_rgb,
+            )
+            result = landmarker.detect(mp_image)
+
+        if not result.pose_landmarks:
+            return None
+
+        # Wrap the Tasks API result in an object compatible with the legacy API
+        # so the rest of the pipeline doesn't need to change.
+        class _LandmarkWrapper:
+            def __init__(self, landmarks):
+                self.landmark = [_LM(lm) for lm in landmarks]
+
+        class _LM:
+            def __init__(self, lm):
+                self.x = lm.x
+                self.y = lm.y
+                self.z = getattr(lm, 'z', 0.0)
+                self.visibility = getattr(lm, 'visibility', 1.0)
+
+        return _LandmarkWrapper(result.pose_landmarks[0])
+
+    except Exception as exc:
+        raise RuntimeError(
+            f"Impossible d'initialiser MediaPipe Pose : {exc}"
+        ) from exc
 
 
 def _require_landmark(landmarks, idx: int, name: str, img_w: int, img_h: int) -> tuple[float, float]:

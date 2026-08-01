@@ -15,7 +15,8 @@ supabase==2.9.1
 requests>=2.31.0
 
 # Module 2 — Computer Vision pipeline
-mediapipe==0.10.35
+mediapipe==0.10.14
+
 opencv-python-headless==4.10.0.84
 numpy==1.26.4
 
