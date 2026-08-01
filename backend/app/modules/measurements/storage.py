@@ -3,28 +3,18 @@ Supabase Storage adapter for Module 2 — Photo Capture & Measurement Estimation
 Tasks T-03.1, T-03.2 — Design §9
 
 Storage path convention (enforced here, mirrors RLS policy):
-    captures/{user_id}/{session_id}/front.jpg
-    captures/{user_id}/{session_id}/profile.jpg
+    photos_capture/{user_id}/{session_id}/front.jpg
+    photos_capture/{user_id}/{session_id}/profile.jpg
 
-RLS bucket policy (applied via migration 004_storage_bucket_rls.sql):
-    auth.uid()::text = (storage.foldername(name))[1]
-This guarantees that each user can only read/write files under their own
-user_id prefix. The path construction in upload() must never deviate from
-this structure, or uploads will be silently rejected by the RLS policy.
-
-Verification checklist (T-03.2):
-  [x] Bucket 'captures' created as PRIVATE in Supabase dashboard.
-  [x] Migration 004 applied — four RLS policies (SELECT / INSERT / UPDATE / DELETE)
-      on storage.objects scoped to bucket_id = 'captures'.
-  [x] Path template `{user_id}/{session_id}/{view}.jpg` places user_id at
-      folder position [1], matching (storage.foldername(name))[1].
+The bucket is PRIVATE. Upload uses the service-role Supabase client (bypasses
+RLS at the server level). Download also uses the Supabase client so it never
+needs a public URL — the stored value is the storage path, not a public URL.
 """
 
 import os
 import uuid
 from typing import Literal
 
-import httpx
 from supabase import Client, create_client
 
 
@@ -42,8 +32,6 @@ def _make_supabase_client() -> Client:
     return create_client(url, key)
 
 
-# Lazy-initialised so that import-time errors don't surface during testing
-# without a real Supabase connection.
 _supabase_client: Client | None = None
 
 
@@ -72,11 +60,11 @@ class StorageDownloadError(Exception):
 
 class SupabaseStorageAdapter:
     """
-    Thin wrapper around the Supabase Python client for photo storage.
+    Wraps Supabase Storage for private-bucket photo handling.
 
-    All paths are constructed as:
-        {user_id}/{session_id}/{view}.jpg
-    inside the 'captures' bucket, satisfying the RLS policy documented above.
+    upload() — stores the file and returns the storage PATH (not a public URL).
+    download() — fetches bytes using the Supabase client (service-role key,
+                 no public URL needed).
     """
 
     def __init__(self, bucket: str | None = None) -> None:
@@ -95,29 +83,14 @@ class SupabaseStorageAdapter:
         mime_type: str,
     ) -> str:
         """
-        Upload a photo to Supabase Storage.
-
-        Parameters
-        ----------
-        user_id     : Owner's UUID — first path segment (for RLS matching).
-        session_id  : Capture session UUID — second path segment.
-        view        : 'front' or 'profile'.
-        file_bytes  : Raw image bytes.
-        mime_type   : 'image/jpeg' or 'image/png'.
-
-        Returns
-        -------
-        str : Public URL of the uploaded file.
-
-        Raises
-        ------
-        StorageUploadError : On any Supabase-side failure.
+        Upload a photo and return its **storage path** (not a public URL).
+        The path is what gets stored in capture_sessions.front_photo_url /
+        profile_photo_url and passed back to download() later.
         """
         path = self._build_path(user_id, session_id, view, mime_type)
         client = _get_client()
 
         try:
-            # upsert=True lets us overwrite on retry (AC-06.1)
             client.storage.from_(self._bucket).upload(
                 path=path,
                 file=file_bytes,
@@ -131,44 +104,33 @@ class SupabaseStorageAdapter:
                 f"Échec de l'upload de la photo ({view}) : {exc}"
             ) from exc
 
-        # Build the public URL from the Supabase project URL
-        supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        public_url = (
-            f"{supabase_url}/storage/v1/object/public/{self._bucket}/{path}"
-        )
-        return public_url
+        # Return the path so the caller can store it and retrieve it later.
+        # We do NOT build a /object/public/ URL because the bucket is private.
+        return path
 
     # ------------------------------------------------------------------
     # download()
     # ------------------------------------------------------------------
 
-    def download(self, url: str) -> bytes:
+    def download(self, path_or_url: str) -> bytes:
         """
-        Download a photo from Supabase Storage by its public URL.
+        Download a photo using the Supabase client (service-role key).
 
-        Parameters
-        ----------
-        url : Full public URL as returned by upload().
-
-        Returns
-        -------
-        bytes : Raw image bytes.
-
-        Raises
-        ------
-        StorageDownloadError : On HTTP error or connection failure.
+        Accepts either:
+        - a bare storage path  e.g. ``{user_id}/{session_id}/front.jpg``
+        - a legacy full URL    e.g. ``https://xxx.supabase.co/storage/v1/...``
+          (for backward compatibility with rows already in the DB)
         """
+        # Normalise: extract the path portion if a full URL was stored
+        path = self._extract_path(path_or_url)
+
         try:
-            response = httpx.get(url, timeout=15.0)
-            response.raise_for_status()
-            return response.content
-        except httpx.HTTPStatusError as exc:
+            data: bytes = _get_client().storage.from_(self._bucket).download(path)
+            return data
+        except Exception as exc:
             raise StorageDownloadError(
-                f"Impossible de télécharger la photo (HTTP {exc.response.status_code}) : {url}"
-            ) from exc
-        except httpx.RequestError as exc:
-            raise StorageDownloadError(
-                f"Erreur réseau lors du téléchargement de la photo : {exc}"
+                f"Impossible de télécharger la photo depuis Storage "
+                f"(bucket={self._bucket}, path={path}) : {exc}"
             ) from exc
 
     # ------------------------------------------------------------------
@@ -182,12 +144,16 @@ class SupabaseStorageAdapter:
         view: Literal["front", "profile"],
         mime_type: str,
     ) -> str:
-        """
-        Construct the storage path for a photo.
-
-        Pattern: {user_id}/{session_id}/{view}.{ext}
-        The first segment is user_id, matching the RLS expression:
-            auth.uid()::text = (storage.foldername(name))[1]
-        """
         ext = "jpg" if mime_type == "image/jpeg" else "png"
         return f"{user_id}/{session_id}/{view}.{ext}"
+
+    def _extract_path(self, path_or_url: str) -> str:
+        """
+        If path_or_url is a full Supabase Storage URL, strip everything up to
+        and including the bucket name so we get a bare object path.
+        Otherwise return as-is.
+        """
+        marker = f"/{self._bucket}/"
+        if marker in path_or_url:
+            return path_or_url.split(marker, 1)[1]
+        return path_or_url
