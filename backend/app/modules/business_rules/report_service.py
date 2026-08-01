@@ -163,12 +163,12 @@ async def _assert_model_exists(model_id: uuid.UUID, db: AsyncSession) -> None:
     """Raise ReportCreationError if no garment model with the given ID exists. Req 4 AC2"""
     from sqlalchemy import text
     result = await db.execute(
-        text("SELECT model_id FROM models WHERE model_id = :mid"),
+        text("SELECT model_id FROM model WHERE model_id = :mid"),
         {"mid": str(model_id)},
     )
     if result.scalar_one_or_none() is None:
         raise ReportCreationError(
-            f"Module 7: model_id={model_id!r} not found in models table."
+            f"Module 7: model_id={model_id!r} not found in model table."
         )
 
 
