@@ -165,9 +165,19 @@ async def run_estimation(session_id: uuid.UUID) -> None:
 
         except Exception:
             # Catch-all: never leave a session stuck in 'processing'
+            import traceback as _tb
+            import logging as _logging
+            tb_str = _tb.format_exc()
+            _logging.getLogger("lova_fashion_api").error(
+                "run_estimation unexpected error for session %s:\n%s",
+                session_id, tb_str,
+            )
             session.status = "failed"
+            # Store the first line of the traceback in failure_reason so it
+            # surfaces in the API response and helps diagnose the issue.
+            first_line = tb_str.strip().split("\n")[-1] if tb_str else "Unknown error"
             session.failure_reason = (
-                "Une erreur interne s'est produite lors de l'analyse. "
+                f"Erreur interne lors de l'analyse : {first_line}. "
                 "Veuillez réessayer."
             )
 
