@@ -465,19 +465,19 @@ async def _load_adjustment_or_422(
             detail=f"Ajustement {adjustment_id} introuvable.",
         )
 
-    # Validate each adjusted zone
+    # Validate each adjusted zone — just check for non-positive values
     for field_name, value in (
         ("adjusted_bust_cm", adjustment.adjusted_bust_cm),
         ("adjusted_waist_cm", adjustment.adjusted_waist_cm),
         ("adjusted_hips_cm", adjustment.adjusted_hips_cm),
     ):
         fval = float(value)
-        if fval <= 0 or fval > 300:
+        if fval <= 0:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
                     f"Valeur invalide pour '{field_name}': {fval} cm. "
-                    f"Attendu: > 0 et ≤ 300."
+                    f"La valeur doit être positive."
                 ),
             )
 

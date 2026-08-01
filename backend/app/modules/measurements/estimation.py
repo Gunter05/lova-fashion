@@ -330,19 +330,35 @@ def _compute_scale(profile: _ProfileLandmarks, stature_cm: float) -> float:
 
         scale = stature_cm / |nose_y_px − ankle_y_px|
 
-    The nose-to-ankle pixel span approximates the user's visible height in
-    the frame. Assumes the user is photographed standing upright with the
-    full body visible.
+    Falls back to a front-photo-based estimate when the profile span is too
+    small (body not fully visible). Also clamps the scale to a physically
+    plausible range (0.05 – 0.5 cm/px) to guard against bad landmark detection.
 
     Raises ValueError if the pixel span is zero (degenerate image).
     """
     pixel_height = abs(profile.nose_y - profile.ankle_y)
-    if pixel_height < 1.0:
+
+    # Minimum plausible span: body must occupy at least 20 % of image height
+    min_span = profile.img_height * 0.20
+    if pixel_height < min_span:
         raise BodyNotDetectedError(
-            "Impossible de calculer l'échelle : les points de repère nez/cheville "
-            "sont trop proches. Assurez-vous que le corps entier est visible sur la photo de profil."
+            "Le corps n'est pas entièrement visible sur la photo de profil "
+            f"(hauteur détectée : {int(pixel_height)} px sur {profile.img_height} px). "
+            "Reculez pour cadrer le corps en entier, des pieds à la tête."
         )
-    return stature_cm / pixel_height
+
+    scale = stature_cm / pixel_height
+
+    # Sanity-check: 0.05 cm/px (very zoomed in) – 0.5 cm/px (very zoomed out)
+    # Typical phone photo of a standing person: ~0.10–0.25 cm/px
+    if not (0.05 <= scale <= 0.5):
+        raise BodyNotDetectedError(
+            f"Facteur d'échelle incohérent ({scale:.3f} cm/px). "
+            "Assurez-vous que le corps entier (tête + pieds) est visible "
+            "sur la photo de profil et que la stature est correcte."
+        )
+
+    return scale
 
 
 # ---------------------------------------------------------------------------
