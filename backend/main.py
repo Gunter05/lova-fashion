@@ -71,18 +71,36 @@ _api_logger = logging.getLogger("lova_fashion_api")
 
 from fastapi.encoders import jsonable_encoder
 
+def _cors_headers(request: Request) -> dict:
+    """Return CORS headers matching the request origin, for use in exception handlers."""
+    origin = request.headers.get("origin", "")
+    import re
+    allowed = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://lova-fashion.vercel.app",
+    ]
+    pattern = re.compile(r"https://lova-fashion(-[a-z0-9]+)*\.vercel\.app")
+    if origin in allowed or pattern.match(origin):
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
+    return {}
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     _api_logger.error(f"Erreur de validation de la requête : {exc.errors()}")
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": "Erreur de validation des données fournies.", "errors": jsonable_encoder(exc.errors())},
+        headers=_cors_headers(request),
     )
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     _api_logger.warning(f"HTTP Exception: {exc.status_code} - {exc.detail}")
-    headers = getattr(exc, "headers", None)
+    headers = {**(getattr(exc, "headers", None) or {}), **_cors_headers(request)}
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
@@ -95,6 +113,7 @@ async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Une erreur serveur interne est survenue. Veuillez réessayer plus tard."},
+        headers=_cors_headers(request),
     )
 
 # ---------------------------------------------------------------------------

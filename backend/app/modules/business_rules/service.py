@@ -142,8 +142,8 @@ async def _load_fabric_or_raise(
             f.fabric_name,
             fc.reference_rigidity_level AS elasticity_category
         FROM fabrics f
-        LEFT JOIN fabric_categories fc ON fc.id = f.category_id
-        WHERE f.id = :fabric_id
+        LEFT JOIN fabric_categories fc ON fc.category_id = f.category_id
+        WHERE f.fabric_id = :fabric_id
         """
     )
     result = await db.execute(sql, {"fabric_id": str(fabric_id)})
