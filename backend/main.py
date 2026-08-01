@@ -159,8 +159,10 @@ class HeaderInjectionMiddleware(BaseHTTPMiddleware):
                     headers_list.append((b"x-user-cni", str(user_id).encode("utf-8")))
 
                     request.scope["headers"] = headers_list
-            except Exception:
-                pass
+            except Exception as _exc:
+                _api_logger.warning(
+                    "HeaderInjectionMiddleware — failed to decode token: %s", _exc
+                )
         return await call_next(request)
 
 app.add_middleware(HeaderInjectionMiddleware)
