@@ -1027,10 +1027,11 @@ class CompatibilityService:
         )
         evaluation = await _persist_evaluation(eval_data, risk_zone_dicts, db)
 
-        # Build response manually to avoid lazy-loading risk_zones outside async context
+        # Build response from in-memory risk_zone_dicts (already available)
+        # — do NOT access evaluation.risk_zones which would trigger a lazy load
         risk_zone_responses = [
             RiskZoneResponse(
-                risk_id=rz.risk_id,
+                risk_id=uuid.uuid4(),  # placeholder — not needed for display
                 rule_id=rz.rule_id,
                 zone_id=rz.zone_id,
                 calculated_variance=float(rz.calculated_variance),
@@ -1038,7 +1039,7 @@ class CompatibilityService:
                 explanation=rz.explanation,
                 rule_version=rz.rule_version,
             )
-            for rz in (evaluation.risk_zones or [])
+            for rz in risk_zone_dicts
         ]
 
         # Publish compatibility.evaluated → triggers Module 7 report creation
