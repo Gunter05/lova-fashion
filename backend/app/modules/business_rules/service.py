@@ -634,7 +634,7 @@ async def _load_active_rules(
               AND fabric_property = :fabric_property
               AND is_active = true
             GROUP BY zone_id
-        ) latest ON cr.zone_id = latest.zone_id
+        ) latest ON cr.zone_id IS NOT DISTINCT FROM latest.zone_id
                AND cr.version = latest.max_version
         LEFT JOIN critical_zone cz ON cz.zone_id = cr.zone_id
         WHERE cr.cut_type = :cut_type
