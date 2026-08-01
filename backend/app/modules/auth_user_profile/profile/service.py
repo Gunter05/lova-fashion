@@ -72,7 +72,7 @@ class SupabaseStorage:
             import os
 
             supabase_url = os.environ.get("SUPABASE_URL", "")
-            supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+            supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_KEY", "")
             bucket = os.environ.get("SUPABASE_PHOTO_BUCKET", "profile-photos")
 
             if not supabase_url or not supabase_key:

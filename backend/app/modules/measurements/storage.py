@@ -80,7 +80,7 @@ class SupabaseStorageAdapter:
     """
 
     def __init__(self, bucket: str | None = None) -> None:
-        self._bucket = bucket or os.environ.get("SUPABASE_STORAGE_BUCKET", "captures")
+        self._bucket = bucket or os.environ.get("SUPABASE_STORAGE_BUCKET", "photos_capture")
 
     # ------------------------------------------------------------------
     # upload()
