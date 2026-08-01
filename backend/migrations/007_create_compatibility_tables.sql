@@ -62,13 +62,13 @@ CREATE TABLE verdict_evaluations (
                             'Indeterminate',
                             'Failed'
                         )),
-    missing_data_log    TEXT,                           -- nullable; populated on Indeterminate/Failed
-    fabric_recommendation VARCHAR(50),                  -- nullable; optional admin note
-    client_id           UUID        NOT NULL,           -- logical FK to auth.users
-    model_id            UUID        NOT NULL REFERENCES model(model_id),
-    fabric_id           UUID        NOT NULL,           -- logical FK to fabrics
+    missing_data_log    TEXT,
+    fabric_recommendation VARCHAR(50),
+    client_id           UUID        NOT NULL,
+    model_id            UUID        NOT NULL,   -- logical FK to model (no hard FK to keep modules decoupled)
+    fabric_id           UUID        NOT NULL,   -- logical FK to fabrics
     measurements_id     UUID        NOT NULL REFERENCES measurement_adjustments(id),
-    morphology_id       UUID        NOT NULL            -- logical FK to body_shapes
+    morphology_id       UUID        NOT NULL    -- logical FK to body_shapes
 );
 
 COMMENT ON TABLE  verdict_evaluations                     IS 'One row per compatibility check run; immutable after INSERT (audit trail).';

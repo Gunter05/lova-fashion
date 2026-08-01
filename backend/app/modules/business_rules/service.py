@@ -791,33 +791,30 @@ async def _persist_evaluation(
     db: AsyncSession,
 ) -> VerdictEvaluation:
     """
-    Persist VerdictEvaluation + all RiskZone rows in a single transaction.
-
-    UUID collision: if IntegrityError on evaluation_id, retry once with a new UUID.
-    Rolls back entirely on any failure (Req 7.7, 7.8).
+    Persist VerdictEvaluation + all RiskZone rows using the existing session.
+    The caller's request-scoped transaction is used directly (no nested begin).
 
     Requirements: 7.1–7.8
     """
     for attempt in range(2):
         try:
-            async with db.begin():
-                evaluation = VerdictEvaluation(**eval_data)
-                db.add(evaluation)
-                await db.flush()  # obtain evaluation_id for FK references
+            evaluation = VerdictEvaluation(**eval_data)
+            db.add(evaluation)
+            await db.flush()  # obtain evaluation_id for FK references
 
-                for rz in risk_zones:
-                    db.add(
-                        RiskZone(
-                            evaluation_id=evaluation.evaluation_id,
-                            rule_id=rz.rule_id,
-                            zone_id=rz.zone_id,
-                            calculated_variance=rz.calculated_variance,
-                            localized_verdict=rz.localized_verdict,
-                            explanation=rz.explanation,
-                            rule_version=rz.rule_version,
-                        )
+            for rz in risk_zones:
+                db.add(
+                    RiskZone(
+                        evaluation_id=evaluation.evaluation_id,
+                        rule_id=rz.rule_id,
+                        zone_id=rz.zone_id,
+                        calculated_variance=rz.calculated_variance,
+                        localized_verdict=rz.localized_verdict,
+                        explanation=rz.explanation,
+                        rule_version=rz.rule_version,
                     )
-                # transaction commits on context-manager exit
+                )
+            await db.flush()
             return evaluation
 
         except IntegrityError as exc:

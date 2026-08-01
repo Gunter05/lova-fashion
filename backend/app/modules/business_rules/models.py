@@ -250,8 +250,7 @@ class VerdictEvaluation(Base):
     client_id: uuid.UUID = Column(UUID(as_uuid=True), nullable=False)
     model_id: uuid.UUID = Column(
         UUID(as_uuid=True),
-        ForeignKey("model.model_id"),
-        nullable=False,
+        nullable=False,   # logical FK to model table (no hard FK to keep modules decoupled)
     )
     fabric_id: uuid.UUID = Column(
         UUID(as_uuid=True), nullable=False
