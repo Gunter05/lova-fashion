@@ -1,18 +1,20 @@
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useFlow } from '../../context/FlowContext';
 import { useLanguage } from '../../context/LanguageContext';
 import BottomNav from './BottomNav';
 import JourneyProgress from '../common/JourneyProgress';
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
+  const { resetFlow } = useFlow();
   const { locale, changeLanguage, t } = useLanguage();
   const navigate = useNavigate();
 
   const displayName =
     user?.nom || user?.full_name || (user?.email ? user.email.split('@')[0] : t('common.user'));
 
-  const handleLogout = () => { logout(); navigate('/login'); };
+  const handleLogout = () => { resetFlow(); logout(); navigate('/login'); };
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: '#FAF8F5' }}>

@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { login as loginApi } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
+import { useFlow } from '../../context/FlowContext';
 import { useLanguage } from '../../context/LanguageContext';
 import fashionBg from '../../assets/fashion1.png';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const auth = useAuth();
+  const { resetFlow } = useFlow();
   const { t, locale, changeLanguage } = useLanguage();
 
   const [email, setEmail] = useState('');
@@ -28,6 +30,8 @@ export default function LoginPage() {
       const { getMyProfile } = await import('../../api/modules');
       const profileRes = await getMyProfile();
       auth.login(profileRes.data, access_token);
+      // Reset any previous user's flow before navigating
+      resetFlow();
       navigate('/');
     } catch (err) {
       const message =

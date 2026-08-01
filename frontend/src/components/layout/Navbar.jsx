@@ -1,11 +1,14 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useFlow } from '../../context/FlowContext';
 
 export default function Navbar() {
   const auth = useAuth();
+  const { resetFlow } = useFlow();
   const navigate = useNavigate();
 
   const handleLogout = () => {
+    resetFlow();
     auth.logout();
     navigate('/login');
   };
