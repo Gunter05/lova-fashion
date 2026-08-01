@@ -105,13 +105,18 @@ from datetime import datetime  # re-imported here for clarity (already in scope 
 class VerificationRequest(BaseModel):
     """
     Body for POST /verifications — triggers a full compatibility evaluation.
+    Accepts the three IDs available in the frontend flow; the service resolves
+    adjustment_id, morphology_id and client_id automatically.
     Requirements: 1.1–1.2, 10.1
     """
-    adjustment_id: UUID = Field(..., description="UUID of the ease-adjusted measurement record (Module 5 output).")
-    model_id: UUID = Field(..., description="UUID of the garment model (Module 4).")
+    session_id: UUID = Field(..., description="UUID of the validated measurement session.")
     fabric_id: UUID = Field(..., description="UUID of the fabric (Module 3).")
-    morphology_id: UUID = Field(..., description="UUID of the client body shape classification.")
-    client_id: UUID = Field(..., description="UUID of the end client requesting the evaluation.")
+    model_id: UUID = Field(..., description="UUID of the garment model (Module 4).")
+    # Legacy fields — kept for backward compatibility, ignored when session_id is present
+    adjustment_id: UUID | None = Field(None)
+    morphology_id: UUID | None = Field(None)
+    client_id: UUID | None = Field(None)
+    silhouette_code: str | None = Field(None, description="Body shape code resolved from session (internal use).")
 
 
 class CompatibilityRuleCreate(BaseModel):

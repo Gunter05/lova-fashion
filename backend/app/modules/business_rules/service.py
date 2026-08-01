@@ -571,23 +571,29 @@ async def _load_fabric_or_422(
 async def _load_morphology_or_422(
     morphology_id: uuid.UUID,
     db: AsyncSession,
+    silhouette_code: str | None = None,
 ) -> Any:
     """
-    Confirm a BodyShape record exists for the given morphology_id.
-
-    Since body_shapes.code is a String PK, we query by passing str(morphology_id)
-    as the code value.  If no row is found, raise HTTP 422.
-
+    Confirm a BodyShape record exists.
+    Accepts either a silhouette_code string (e.g. "HOURGLASS") directly,
+    or falls back to querying by str(morphology_id) as the code.
     Requirements: 1.9, 1.10
     """
-    sql = text("SELECT code FROM body_shapes WHERE code = :morphology_id")
-    result = await db.execute(sql, {"morphology_id": str(morphology_id)})
+    code_to_check = silhouette_code or str(morphology_id)
+    sql = text("SELECT code FROM body_shapes WHERE code = :code")
+    result = await db.execute(sql, {"code": code_to_check})
     row = result.mappings().first()
+
+    if row is None:
+        # If still not found, try all codes (case-insensitive)
+        sql2 = text("SELECT code FROM body_shapes WHERE UPPER(code) = UPPER(:code)")
+        result2 = await db.execute(sql2, {"code": code_to_check})
+        row = result2.mappings().first()
 
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Morphologie {morphology_id} introuvable.",
+            detail=f"Morphologie '{code_to_check}' introuvable.",
         )
 
     return row
@@ -878,7 +884,7 @@ class CompatibilityService:
         adjustment = await _load_adjustment_or_422(request.adjustment_id, db)
         model = await _load_model_or_422(request.model_id, db)
         fabric_row, fabric_property = await _load_fabric_or_422(request.fabric_id, db)
-        await _load_morphology_or_422(request.morphology_id, db)
+        await _load_morphology_or_422(request.morphology_id, db, silhouette_code=request.silhouette_code)
 
         # ── Phase 2 — Rule Loading ────────────────────────────────────
         cut_type = (

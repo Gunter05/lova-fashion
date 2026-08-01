@@ -246,6 +246,58 @@ async def create_verification(
     Req 10.2 — 201 response with VerdictEvaluationResponse body.
     Req 10.3 — evaluation persisted; retrievable via GET /verifications/{id}.
     """
+    from sqlalchemy import select as _select
+    from app.modules.measurements.models import CaptureSession, RawMeasurement
+    from app.modules.business_rules.models import MeasurementAdjustment
+
+    # Resolve adjustment_id from session_id + fabric_id when not provided
+    if body.adjustment_id is None:
+        stmt = (
+            _select(MeasurementAdjustment)
+            .where(
+                MeasurementAdjustment.session_id == body.session_id,
+                MeasurementAdjustment.fabric_id == body.fabric_id,
+            )
+            .order_by(MeasurementAdjustment.calculated_at.desc())
+        )
+        result = await db.execute(stmt)
+        adj = result.scalars().first()
+        if adj is None:
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(
+                status_code=422,
+                detail=(
+                    "Aucun ajustement trouvé pour cette session et ce tissu. "
+                    "Calculez d'abord les marges d'aisance."
+                ),
+            )
+        body = body.model_copy(update={"adjustment_id": adj.id})
+
+    # Resolve morphology_id from the session's RawMeasurement silhouette_code
+    if body.morphology_id is None:
+        stmt = _select(RawMeasurement).where(
+            RawMeasurement.session_id == body.session_id
+        )
+        result = await db.execute(stmt)
+        raw = result.scalars().first()
+        if raw is None:
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(
+                status_code=422,
+                detail="Aucune mensuration validée pour cette session.",
+            )
+        # silhouette_code is a string like "HOURGLASS"
+        # Use a placeholder UUID for morphology_id and pass the real code separately
+        import uuid as _uuid
+        body = body.model_copy(update={
+            "morphology_id": _uuid.UUID("00000000-0000-0000-0000-000000000001"),
+            "silhouette_code": raw.silhouette_code,
+        })
+
+    # client_id is always the authenticated user
+    if body.client_id is None:
+        body = body.model_copy(update={"client_id": current_user})
+
     return await CompatibilityService.verify(body, current_user, db)
 
 
