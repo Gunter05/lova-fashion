@@ -276,13 +276,28 @@ class CaptureSessionService:
             )
 
         # --- Upload to Supabase Storage (AC-02.5) ---
-        photo_url = _storage.upload(
-            user_id=user_id,
-            session_id=session.id,
-            view=view,
-            file_bytes=file_bytes,
-            mime_type=content_type,
-        )
+        try:
+            photo_url = _storage.upload(
+                user_id=user_id,
+                session_id=session.id,
+                view=view,
+                file_bytes=file_bytes,
+                mime_type=content_type,
+            )
+        except Exception as exc:
+            import logging as _logging
+            _logging.getLogger("lova_fashion_api").error(
+                "Storage upload failed — user=%s session=%s view=%s : %s",
+                user_id, session.id, view, exc,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Impossible de sauvegarder la photo ({view}). "
+                    "Vérifiez que le bucket Supabase Storage existe et que "
+                    "SUPABASE_KEY a les droits Storage. Détail : " + str(exc)
+                ),
+            )
 
         # --- Persist URL on session ---
         if view == "front":
