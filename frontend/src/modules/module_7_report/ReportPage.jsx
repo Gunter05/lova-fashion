@@ -65,7 +65,25 @@ export default function ReportPage() {
     }
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    // Inject print styles to hide the app chrome and show only the report
+    const style = document.createElement('style');
+    style.id = 'lova-print-style';
+    style.textContent = `
+      @media print {
+        body > * { display: none !important; }
+        #lova-print-root { display: block !important; }
+        #lova-print-root { position: fixed; inset: 0; background: white; padding: 24px; }
+        .print\\:hidden { display: none !important; }
+      }
+    `;
+    document.head.appendChild(style);
+    window.print();
+    // Clean up after print dialog closes
+    window.addEventListener('afterprint', () => {
+      document.getElementById('lova-print-style')?.remove();
+    }, { once: true });
+  };
 
   if (loading) return <Spinner />;
 
@@ -160,18 +178,37 @@ export default function ReportPage() {
 function ReportDetail({ report, onClose, onPrint, printRef, t }) {
   const cfg = VERDICT_CONFIG[report.verdict] ?? { badge: 'bg-gray-100 text-gray-600', icon: '•', pct: 50 };
   const m = report.adjusted_measurements;
+  const { locale } = useLanguage();
 
   return (
-    <div ref={printRef} className="p-5 space-y-5">
+    <div ref={printRef} id="lova-print-root" className="p-5 space-y-5">
+      {/* Header — hidden when printing */}
       <div className="flex items-center justify-between print:hidden">
         <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto" />
       </div>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-900">{t('report.summary')}</h2>
-        <div className="flex gap-2">
-          <button onClick={onPrint} className="px-3 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-500 hover:bg-gray-50">🖨</button>
+        <div className="flex gap-2 print:hidden">
+          <button
+            onClick={onPrint}
+            title="Télécharger PDF"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#D95D39]/40 text-xs font-semibold text-[#D95D39] hover:bg-[#D95D39]/5 transition"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            PDF
+          </button>
           <button onClick={onClose} className="px-3 py-1.5 rounded-xl bg-gray-100 text-xs text-gray-700 hover:bg-gray-200">{t('common.close')}</button>
         </div>
+      </div>
+
+      {/* Print header — only visible when printing */}
+      <div className="hidden print:block text-center pb-4 border-b border-gray-200">
+        <p className="text-xl font-extrabold text-gray-900">LOVA FASHION</p>
+        <p className="text-sm text-gray-500 mt-1">
+          {t('report.summary')} — {new Date(report.generated_at).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', { dateStyle: 'long' })}
+        </p>
       </div>
 
       <p className="text-xs text-gray-400">{t('report.customOutfit')}</p>
@@ -249,13 +286,24 @@ function ReportDetail({ report, onClose, onPrint, printRef, t }) {
         <p>{t('report.adjustmentId')} {report.adjustment_id}</p>
       </div>
 
-      <button
-        onClick={onClose}
-        className="w-full rounded-2xl py-3.5 text-sm font-bold text-white"
-        style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
-      >
-        {t('report.sendBtn')}
-      </button>
+      <div className="print:hidden space-y-2">
+        <button
+          onClick={onPrint}
+          className="w-full rounded-2xl py-3.5 text-sm font-bold text-white flex items-center justify-center gap-2"
+          style={{ background: 'linear-gradient(90deg, #D95D39, #B54A2E)' }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          {locale === 'fr' ? 'Télécharger en PDF' : 'Download as PDF'}
+        </button>
+        <button
+          onClick={onClose}
+          className="w-full rounded-2xl py-3 text-sm font-medium text-gray-500 bg-[#F5F0EA]"
+        >
+          {t('common.close')}
+        </button>
+      </div>
     </div>
   );
 }
