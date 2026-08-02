@@ -1,53 +1,47 @@
 import { NavLink } from 'react-router-dom';
+import { useLanguage } from '../../context/LanguageContext';
+import { NAV_ITEMS } from './Navitems';
 
-const modules = [
-  { number: 1, label: 'Auth & Profile',   path: '/modules/1' },
-  { number: 2, label: 'Measurements',     path: '/modules/2' },
-  { number: 3, label: 'Fabric Catalog',   path: '/modules/3' },
-  { number: 4, label: 'Pattern Catalog',  path: '/modules/4' },
-  { number: 5, label: 'Ease Margins',     path: '/modules/5' },
-  { number: 6, label: 'Compatibility',    path: '/modules/6' },
-  { number: 7, label: 'Final Report',     path: '/modules/7' },
-];
-
+// Desktop-only: hidden below md breakpoint, BottomNav takes over on mobile.
+// Same NAV_ITEMS as BottomNav so the two never show different destinations.
 export default function Sidebar() {
+  const { t } = useLanguage();
+
   return (
-    <aside className="flex flex-col w-64 min-h-screen bg-gray-900 text-white shrink-0">
-      {/* Branding */}
-      <div className="flex items-center gap-2 px-6 py-5 border-b border-gray-700">
-        <span className="text-rose-400 font-extrabold text-xl tracking-widest uppercase">
-          LOVA
-        </span>
-        <span className="text-white font-light text-xl tracking-widest uppercase">
-          FASHION
+    <aside
+      className="hidden md:flex flex-col w-64 min-h-screen shrink-0 border-r border-gray-200"
+      style={{ background: '#FAF8F5' }}
+    >
+      <div className="px-6 py-6 border-b border-gray-200">
+        <span className="text-xl font-extrabold tracking-widest text-gray-900">LOVA</span>
+        <span className="text-[10px] font-semibold tracking-[0.35em] text-terracotta uppercase block -mt-1">
+          Fashion
         </span>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex flex-col gap-1 px-3 py-4 flex-1" aria-label="Module navigation">
-        {modules.map(({ number, label, path }) => (
+      <nav className="flex flex-col gap-1 px-3 py-4 flex-1" aria-label="Navigation principale">
+        {NAV_ITEMS.map(({ path, labelKey, icon }) => (
           <NavLink
-            key={number}
+            key={path}
             to={path}
             className={({ isActive }) =>
               [
-                'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-rose-500 text-white'
-                  : 'text-gray-300 hover:bg-gray-700 hover:text-white',
+                'flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors',
+                isActive ? 'bg-terracotta/10 text-terracotta' : 'text-gray-600 hover:bg-gray-100',
               ].join(' ')
             }
           >
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-white/10 text-xs font-bold shrink-0">
-              {number}
-            </span>
-            {label}
+            {({ isActive }) => (
+              <>
+                {icon(isActive)}
+                {t(labelKey)}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      {/* Footer */}
-      <div className="px-6 py-4 border-t border-gray-700 text-xs text-gray-500">
+      <div className="px-6 py-4 border-t border-gray-200 text-xs text-gray-400">
         © {new Date().getFullYear()} LOVA FASHION
       </div>
     </aside>
