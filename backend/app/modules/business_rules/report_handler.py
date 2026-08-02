@@ -65,7 +65,10 @@ def make_compatibility_evaluated_handler(session_factory):
             try:
                 report = await service.create_report_from_event(event, db)
                 await db.commit()
-                await db.refresh(report)
+                # `report` is a SimpleNamespace (raw-SQL insert, not ORM-mapped),
+                # so db.refresh() doesn't apply here — it needs _sa_instance_state,
+                # which only real ORM instances have. All fields the handler needs
+                # below are already set on the SimpleNamespace returned above.
                 logger.info(
                     "Module 7: RapportMesure created — id=%s user_id=%s verdict=%s",
                     report.id_report,
