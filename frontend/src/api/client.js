@@ -29,4 +29,27 @@ client.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Response interceptor — on an expired/invalid token, clear it and send the
+// user back to /login instead of leaving the page stuck on a failed request.
+// Skip this for the auth endpoints themselves: a 401 from /auth/login means
+// "wrong credentials", not "session expired" — that should stay on the page
+// so the form can show the error, not force a redirect.
+client.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    const url = error.config?.url || '';
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register');
+
+    if (status === 401 && !isAuthEndpoint) {
+      localStorage.removeItem(TOKEN_KEY);
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export default client;
